@@ -1,0 +1,1555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Bosithon Yusupov — Portfolio</title>
+
+<meta name="description" content="Bosithon Yusupov — Engineer, frontend developer and builder. Open to unique, impossible problems. A scroll-driven cinematic forest portfolio." />
+<meta name="author" content="Bosithon Yusupov" />
+<meta name="theme-color" content="#060905" />
+<meta name="color-scheme" content="dark" />
+
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Bosithon Yusupov — Portfolio" />
+<meta property="og:description" content="Open to unique, impossible problems. A scroll-driven cinematic forest portfolio." />
+<meta property="og:image" content="./og-image.jpg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Bosithon Yusupov — Portfolio" />
+<meta name="twitter:description" content="Open to unique, impossible problems. A scroll-driven cinematic forest portfolio." />
+<meta name="twitter:image" content="./og-image.jpg" />
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23060905'/%3E%3Ccircle cx='16' cy='16' r='7.5' fill='none' stroke='%238fb882' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='2.2' fill='%238fb882'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://unpkg.com" crossorigin />
+<link rel="dns-prefetch" href="https://unpkg.com" />
+
+<!--
+  ============================================================================
+  SCROLL-DRIVEN FOREST — v-final (ultra-smooth)
+  ----------------------------------------------------------------------------
+  The on-screen <canvas> ONLY ever shows the frame for the current scroll
+  position — never the live video — so the forest is frozen unless you scroll,
+  and scrolling animates it both forward and backward.
+
+  SMOOTHNESS (researched best practices applied):
+   - SUB-FRAME CROSS-FADE: the two nearest captured frames are blended by the
+     fractional scroll position (globalAlpha), so motion is continuous instead
+     of stepping between discrete frames — the key perceptual smoothness win.
+   - FRAME-RATE-INDEPENDENT easing: smoothing uses the rAF time delta, so it
+     feels identical on 60/120/144Hz displays (1 - (1-k)^(dt/16.67)).
+   - drawImage micro-opts (MDN "Optimizing canvas"): whole-number destination
+     coords, imageSmoothingQuality 'high', and redraw ONLY when the interpolated
+     position actually changes (idle = no work). DPR capped at 2, low-latency
+     2D context { alpha:false, desynchronized:true }.
+
+  HARVEST (runs once, in the background):
+   - The muted video plays offscreen for ONE full pass; each presented frame is
+     copied (drawImage only — never reads the video, so it can't taint/throw on
+     file://) into a small offscreen canvas keyed by timestamp. Completion is
+     COVERAGE-based (~92% of real duration), then the video is paused.
+
+  BLACK-FRAME HANDLING (clips often fade in/out from black):
+   - Load shows a still grabbed from a bit INTO the clip (past the fade-in).
+   - The scroll loop maps only to the NON-black range.
+   - Over http://localhost we read pixels to trim black precisely; on file:// we
+     fall back to a fixed head/tail trim.
+  ============================================================================
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300&family=Inter:wght@300;400&display=swap" rel="stylesheet" />
+
+<style>
+  :root { --accent: #8fb882; --bg: #060905; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: var(--bg); width: 100%; overscroll-behavior: none; }
+  body {
+    height: 999999px; /* THE ONE RULE: the page never ends. */
+    color: #fff;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-weight: 300;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: pan-y; /* allow vertical scroll, block pinch/double-tap zoom jank */
+  }
+
+  #forest {
+    position: fixed; top: 0; left: 0;
+    width: 2px; height: 2px; opacity: 0;
+    pointer-events: none; z-index: -1;
+  }
+  #video-canvas {
+    position: fixed; top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 1; display: block; background: var(--bg);
+  }
+  #vignette {
+    position: fixed; inset: 0; z-index: 2; pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 30%, rgba(4, 8, 3, 0.7) 100%);
+  }
+
+  #loader {
+    position: fixed; inset: 0; z-index: 50;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 22px; background: var(--bg); transition: opacity 0.6s ease;
+  }
+  #loader.hide { opacity: 0; pointer-events: none; }
+  #loader .ring {
+    width: 34px; height: 34px;
+    border: 1px solid rgba(143,184,130,0.25); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loader .ltext {
+    font-family: 'Inter', sans-serif; font-weight: 300; font-size: 10px;
+    letter-spacing: 0.38em; text-transform: uppercase; color: rgba(143,184,130,0.7);
+  }
+  #loader .l-bar {
+    width: 180px; height: 2px; border-radius: 2px; overflow: hidden;
+    background: rgba(143,184,130,0.15);
+  }
+  #loader .l-bar > div {
+    width: 0; height: 100%; background: var(--accent);
+    transition: width 0.25s ease;
+  }
+  #loader .l-pct {
+    font-family: 'Inter', sans-serif; font-weight: 300; font-size: 12px;
+    letter-spacing: 0.2em; color: rgba(143,184,130,0.85);
+  }
+  /* Smooth fade played when a contact link is clicked, before opening it. */
+  #nav-fade {
+    position: fixed; inset: 0; z-index: 40; pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(143,184,130,0.22), rgba(4,8,3,0.97));
+    opacity: 0; transition: opacity 0.45s ease;
+  }
+  #nav-fade.on { opacity: 1; }
+
+  /* Real 3D text renders here (WebGL). Sits above the vignette. */
+  #text3d {
+    position: fixed; inset: 0; z-index: 5;
+    width: 100%; height: 100%; display: block; pointer-events: none;
+  }
+  /* Static fallback shown only for reduced-motion / no-WebGL. */
+  .panel {
+    position: fixed; left: 50%; top: 42%;
+    transform: translate(-50%, -50%);
+    z-index: 6; pointer-events: none; opacity: 0;
+    width: min(900px, 88vw); text-align: center;
+    text-shadow: 0 0 60px rgba(0,0,0,1), 0 2px 30px rgba(0,0,0,0.95);
+  }
+  .panel.show { opacity: 1; }
+  .tag {
+    font-family: 'Inter', sans-serif; font-weight: 300; font-size: 11px;
+    letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent);
+    margin-bottom: 22px; display: block;
+  }
+  .headline {
+    font-family: 'Cormorant Garamond', serif; font-weight: 300;
+    font-size: clamp(40px, 6.5vw, 88px); letter-spacing: -0.02em;
+    line-height: 1.02; color: rgba(255,255,255,0.94);
+  }
+  .slogan {
+    font-family: 'Cormorant Garamond', serif; font-style: italic; font-weight: 300;
+    font-size: clamp(20px, 3vw, 36px); color: var(--accent); margin-top: 18px;
+  }
+  .sub {
+    font-family: 'Inter', sans-serif; font-weight: 300;
+    font-size: clamp(14px, 1.6vw, 17px); letter-spacing: 0.04em;
+    line-height: 1.85; color: rgba(255,255,255,0.52);
+    margin-top: 22px; max-width: 620px; margin-left: auto; margin-right: auto;
+  }
+
+  #scroll-hint {
+    position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+    z-index: 15; display: flex; flex-direction: column; align-items: center;
+    gap: 14px; transition: opacity 0.8s ease; opacity: 1; pointer-events: none;
+  }
+  #scroll-hint .line {
+    width: 1px; height: 56px; background: rgba(143,184,130,0.5);
+    animation: hintPulse 2s ease-in-out infinite;
+  }
+  #scroll-hint .label { font-size: 10px; letter-spacing: 0.38em; opacity: 0.35; color: #fff; }
+  @keyframes hintPulse { 0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; } }
+  #scroll-hint.hidden { opacity: 0; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #scroll-hint .line { animation: none; }
+    #loader .ring { animation: none; }
+  }
+
+  /* ---- Cinematic "Enter" gate ---- */
+  #enter-btn {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -42%);
+    display: flex; flex-direction: column; align-items: center; gap: 18px;
+    background: none; border: 0; padding: 24px;
+    opacity: 0; pointer-events: none; transition: opacity 1s ease, transform 1s ease;
+  }
+  #loader.ready .ring, #loader.ready .ltext, #loader.ready .l-bar, #loader.ready .l-pct {
+    opacity: 0; transition: opacity .5s ease; pointer-events: none;
+  }
+  #loader.ready #enter-btn { opacity: 1; transform: translate(-50%, -50%); pointer-events: auto; }
+  .enter-name {
+    font-family: 'Cormorant Garamond', serif; font-weight: 300;
+    font-size: clamp(48px, 9vw, 110px); letter-spacing: 0.01em; line-height: 1;
+    color: rgba(255,255,255,0.96);
+  }
+  .enter-cta {
+    font-family: 'Inter', sans-serif; font-weight: 300; font-size: 11px;
+    letter-spacing: 0.42em; text-transform: uppercase; color: var(--accent);
+    transition: letter-spacing .5s ease; animation: ctaPulse 2.6s ease-in-out infinite;
+  }
+  #enter-btn:hover .enter-cta { letter-spacing: 0.6em; }
+  @keyframes ctaPulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+
+  /* ---- Device advisory (shown on phones / tablets, on the Enter gate) ---- */
+  #device-note {
+    position: absolute; left: 50%; bottom: calc(6% + env(safe-area-inset-bottom));
+    transform: translate(-50%, 12px); width: min(88vw, 440px);
+    display: none; opacity: 0;
+    transition: opacity 1.1s ease .35s, transform 1.1s ease .35s;
+    flex-direction: column; align-items: center; text-align: center; gap: 9px;
+    padding: 18px 20px 20px; border-radius: 16px;
+    border: 1px solid rgba(143,184,130,0.22);
+    background: rgba(8,14,7,0.55);
+    backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px);
+    box-shadow: 0 12px 44px rgba(0,0,0,0.42);
+  }
+  #loader.ready #device-note.on { display: flex; opacity: 1; transform: translate(-50%, 0); }
+  .dn-icon { font-size: 22px; line-height: 1; opacity: .9; }
+  .dn-title {
+    font-family: 'Cormorant Garamond', serif; font-weight: 300;
+    font-size: 21px; letter-spacing: .01em; line-height: 1.15; color: rgba(255,255,255,0.95);
+  }
+  .dn-body {
+    font-family: 'Inter', sans-serif; font-weight: 300; font-size: 12.5px;
+    line-height: 1.6; letter-spacing: .015em; color: rgba(214,224,206,0.78);
+  }
+  #device-note-kind { color: var(--accent); white-space: nowrap; }
+  @media (prefers-reduced-motion: reduce) { #device-note { transition: opacity .4s ease; } }
+
+  /* ---- Ambient sound toggle ---- */
+  #audio-toggle {
+    position: fixed;
+    top: calc(18px + env(safe-area-inset-top));
+    right: calc(20px + env(safe-area-inset-right));
+    z-index: 45;
+    width: 38px; height: 38px; border-radius: 50%;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(8,14,8,0.35); border: 1px solid rgba(143,184,130,0.28);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    opacity: 0; transition: opacity .8s ease, border-color .3s ease, background .3s ease;
+  }
+  #audio-toggle.show { display: flex; opacity: 1; }
+  #audio-toggle:hover { border-color: rgba(143,184,130,0.6); background: rgba(8,14,8,0.55); }
+  #audio-toggle svg { width: 17px; height: 17px; stroke: var(--accent); fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  #audio-toggle .wave { transition: opacity .25s ease; }
+  #audio-toggle.muted .wave { opacity: 0.12; }
+  #audio-toggle .slash { opacity: 0; transition: opacity .25s ease; }
+  #audio-toggle.muted .slash { opacity: 1; }
+
+  /* ---- Forest ink cursor (gooey trail, fine-pointer devices only) ---- */
+  #ink-cursor {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 9999; opacity: 0;
+    filter: url('#goo'); transition: opacity .45s ease;
+  }
+  #ink-cursor span {
+    position: absolute; display: block; width: 24px; height: 24px;
+    border-radius: 50%; background: rgba(150,196,128,0.72); will-change: transform;
+  }
+  body.has-cursor #ink-cursor { opacity: 1; }
+  body.has-cursor, body.has-cursor * { cursor: none !important; }
+
+  /* ---- Screen-reader / SEO content (visually hidden, still in DOM) ---- */
+  .visually-hidden {
+    position: absolute !important; width: 1px; height: 1px;
+    padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0);
+    white-space: nowrap; border: 0;
+  }
+
+  /* ---- Chapter navigation + scroll progress rail ---- */
+  #chapter-nav {
+    position: fixed; right: calc(26px + env(safe-area-inset-right)); top: 50%; transform: translateY(-50%) translateX(14px);
+    z-index: 44; display: flex; flex-direction: column; align-items: flex-end; gap: 20px;
+    opacity: 0; pointer-events: none; transition: opacity .9s ease, transform .9s ease;
+  }
+  #chapter-nav.show { opacity: 1; transform: translateY(-50%) translateX(0); pointer-events: auto; }
+  #chapter-nav .nav-track {
+    position: absolute; right: 3px; top: -6px; bottom: -6px; width: 1px;
+    background: rgba(143,184,130,0.18);
+  }
+  #chapter-nav .nav-track-fill {
+    position: absolute; right: 3px; top: -6px; width: 1px; height: 0;
+    background: var(--accent); transition: height .25s ease; box-shadow: 0 0 8px rgba(143,184,130,0.7);
+  }
+  .nav-item {
+    position: relative; display: flex; align-items: center; gap: 12px;
+    background: none; border: 0; padding: 0; cursor: pointer;
+    font-family: 'Inter', sans-serif; font-weight: 300; color: #fff;
+  }
+  .nav-item .nav-label {
+    font-size: 10px; letter-spacing: 0.28em; text-transform: uppercase;
+    color: rgba(255,255,255,0.5); opacity: 0; transform: translateX(6px);
+    transition: opacity .35s ease, transform .35s ease, color .35s ease;
+  }
+  .nav-item .nav-dot {
+    width: 7px; height: 7px; border-radius: 50%; flex: none;
+    background: transparent; border: 1px solid rgba(143,184,130,0.5);
+    transition: background .35s ease, border-color .35s ease, transform .35s ease;
+  }
+  .nav-item:hover .nav-label { opacity: 1; transform: translateX(0); color: rgba(255,255,255,0.85); }
+  .nav-item:hover .nav-dot { border-color: var(--accent); }
+  .nav-item.active .nav-dot { background: var(--accent); border-color: var(--accent); transform: scale(1.25); }
+  .nav-item.active .nav-label { opacity: 1; transform: translateX(0); color: var(--accent); }
+  @media (max-width: 640px) { #chapter-nav { display: none; } }
+  /* Small phones: tighten the chrome so nothing crowds the frame. */
+  @media (max-width: 480px) {
+    #scroll-hint .line { height: 40px; }
+    #audio-toggle { width: 34px; height: 34px; }
+  }
+  /* Short landscape (phones on their side): the hint would overlap content. */
+  @media (max-height: 430px) and (orientation: landscape) {
+    #scroll-hint { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #chapter-nav .nav-track-fill, .nav-item .nav-label, .nav-item .nav-dot { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+  <main class="visually-hidden">
+    <h1>Bosithon Yusupov — MIS Student, Frontend Developer &amp; Builder</h1>
+    <p>Open to unique, impossible problems. I build fast, beautiful interfaces and chase problems no one wants to touch.</p>
+    <nav aria-label="Contact links">
+      <ul>
+        <li><a href="https://github.com/">GitHub</a></li>
+        <li><a href="https://t.me/">Telegram</a></li>
+        <li><a href="https://www.linkedin.com/">LinkedIn</a></li>
+        <li><a href="https://www.instagram.com/">Instagram</a></li>
+      </ul>
+    </nav>
+  </main>
+
+  <video id="forest" muted playsinline loop preload="auto" autoplay src="./forest-loop.mp4"></video>
+
+  <canvas id="video-canvas"></canvas>
+  <div id="vignette"></div>
+
+  <div id="loader">
+    <div class="ring"></div>
+    <div class="ltext">Preparing forest</div>
+    <div class="l-bar"><div id="l-bar-fill"></div></div>
+    <div class="l-pct" id="l-pct">0%</div>
+    <button id="enter-btn" type="button" aria-label="Enter the experience">
+      <span class="enter-name">Bosithon</span>
+      <span class="enter-cta">Enter &#8629;</span>
+    </button>
+    <div id="device-note" role="note" aria-live="polite">
+      <span class="dn-icon" aria-hidden="true">&#128421;&#65039;</span>
+      <span class="dn-title">Best experienced on a larger screen</span>
+      <span class="dn-body">You&#8217;re on <span id="device-note-kind">a phone</span>. This piece runs a live 3D forest &#8212; depth, ambient sound and a magnetic cursor &#8212; that truly comes alive on a laptop or desktop. You&#8217;re welcome to explore here, but for the full experience, open it on a bigger screen.</span>
+    </div>
+  </div>
+
+  <div id="nav-fade"></div>
+
+  <button id="audio-toggle" type="button" aria-label="Toggle ambient sound" title="Ambient sound">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 9 H7 L12 5 V19 L7 15 H4 Z"></path>
+      <path class="wave" d="M16 9 C17.5 10.5 17.5 13.5 16 15"></path>
+      <path class="wave" d="M18.5 6.5 C21.5 9.5 21.5 14.5 18.5 17.5"></path>
+      <line class="slash" x1="3" y1="3" x2="21" y2="21"></line>
+    </svg>
+  </button>
+
+  <nav id="chapter-nav" aria-label="Chapters">
+    <span class="nav-track"></span>
+    <span class="nav-track-fill" id="nav-fill"></span>
+    <button class="nav-item active" type="button" data-t="0" aria-label="Go to Intro"><span class="nav-label">Intro</span><span class="nav-dot"></span></button>
+    <button class="nav-item" type="button" data-t="0.19" aria-label="Go to Identity"><span class="nav-label">Identity</span><span class="nav-dot"></span></button>
+    <button class="nav-item" type="button" data-t="0.45" aria-label="Go to Manifesto"><span class="nav-label">Manifesto</span><span class="nav-dot"></span></button>
+    <button class="nav-item" type="button" data-t="0.70" aria-label="Go to Craft"><span class="nav-label">Craft</span><span class="nav-dot"></span></button>
+    <button class="nav-item" type="button" data-t="0.8" aria-label="Go to Contact"><span class="nav-label">Contact</span><span class="nav-dot"></span></button>
+  </nav>
+
+  <svg id="goo-filter" width="0" height="0" aria-hidden="true" style="position:absolute">
+    <defs>
+      <filter id="goo">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
+        <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 34 -14" result="goo" />
+        <feComposite in="SourceGraphic" in2="goo" operator="atop" />
+      </filter>
+    </defs>
+  </svg>
+  <div id="ink-cursor"></div>
+
+  <canvas id="text3d"></canvas>
+
+  <div class="panel" id="panel-fallback">
+    <span class="tag">Portfolio · 2026</span>
+    <h1 class="headline">Bosithon Yusupov</h1>
+    <p class="slogan">Open to unique, impossible problems.</p>
+    <p class="sub">MIS Student · Frontend Developer · Builder</p>
+  </div>
+
+  <div id="scroll-hint">
+    <div class="line"></div>
+    <div class="label">SCROLL</div>
+  </div>
+
+  <script src="https://unpkg.com/lenis@1.1.14/dist/lenis.min.js"></script>
+  <script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.147.0/examples/js/geometries/TextGeometry.js"></script>
+  <script src="https://unpkg.com/three@0.147.0/examples/js/loaders/FontLoader.js"></script>
+  <script src="https://unpkg.com/three@0.147.0/examples/js/environments/RoomEnvironment.js"></script>
+
+  <script>
+  (function () {
+    'use strict';
+
+    // Don't let the browser restore the previous scroll position on reload.
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
+    // Device classing: width OR a coarse pointer means "mobile" — so a phone in
+    // landscape (which can be >768px wide) still gets the lighter, optimized path.
+    var coarse = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+    var isMobile = window.innerWidth < 768 || coarse;
+    // Low-end heuristic (few cores / little RAM) -> render even leaner.
+    var PERF_LOW = (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) ||
+                   (navigator.deviceMemory && navigator.deviceMemory <= 4) || false;
+    // Clamp render resolution. Native DPR on phones is often 3+, which destroys
+    // WebGL/canvas fill-rate; the researched consensus is to cap near 2 on
+    // desktop and lower on mobile/low-end for stable FPS at imperceptible cost.
+    function maxDPR() { return isMobile ? (PERF_LOW ? 1.25 : 1.75) : 2; }
+    var REF_ASPECT = 1.6; // design reference aspect; drives aspect-aware FOV below.
+    var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var CYCLE_PX = isMobile ? 2500 : 4000;
+    // Absolute scroll distance over which the 3D text flies fully in. Unlike the
+    // forest (which loops), the text rides this once and rests on the contact menu.
+    var TEXT_SPAN = isMobile ? 4200 : 6500;
+
+    document.body.style.height = '999999px';
+
+    var lenis = new Lenis({ lerp: 0.09, smoothWheel: true, syncTouch: isMobile, wheelMultiplier: 1, infinite: false });
+    function getScroll() {
+      var s = (lenis && typeof lenis.scroll === 'number') ? lenis.scroll : window.scrollY;
+      return s || 0;
+    }
+
+    // Always begin from the very top, even after a reload.
+    function resetToTop() {
+      window.scrollTo(0, 0);
+      if (lenis && lenis.scrollTo) lenis.scrollTo(0, { immediate: true });
+    }
+    resetToTop();
+    window.addEventListener('load', resetToTop);
+
+    // ============================================================
+    //  ENTER GATE + AMBIENT AUDIO + CUSTOM CURSOR
+    // ============================================================
+    // Hold scrolling until the visitor taps "Enter" — keeps the intro composed
+    // and lets audio begin on a genuine user gesture (autoplay-safe).
+    document.documentElement.style.overflow = 'hidden';
+    var entered = false;
+
+    // ---- Synthesized forest ambience (no external audio file required) ----
+    var Ambience = (function () {
+      var ctx = null, master = null, started = false, muted = false, vol = 0.35, birdT = null;
+      function noise() {
+        var len = ctx.sampleRate * 2;
+        var buf = ctx.createBuffer(1, len, ctx.sampleRate);
+        var d = buf.getChannelData(0), last = 0;
+        for (var i = 0; i < len; i++) { var w = Math.random() * 2 - 1; last = (last + 0.02 * w) / 1.02; d[i] = last * 3.2; }
+        return buf;
+      }
+      function loopNoise(type, freq, q, gain) {
+        var s = ctx.createBufferSource(); s.buffer = noise(); s.loop = true;
+        var f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+        var g = ctx.createGain(); g.gain.value = gain;
+        s.connect(f); f.connect(g); g.connect(master); s.start();
+        return { filter: f, gain: g };
+      }
+      function chirp() {
+        if (!ctx || muted) return;
+        var t = ctx.currentTime, base = 1500 + Math.random() * 1900;
+        var o = ctx.createOscillator(); o.type = 'sine'; var g = ctx.createGain();
+        o.frequency.setValueAtTime(base, t);
+        o.frequency.exponentialRampToValueAtTime(base * 1.5, t + 0.05);
+        o.frequency.exponentialRampToValueAtTime(base * 0.85, t + 0.13);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.05, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
+        o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.2);
+        if (Math.random() < 0.45) {
+          var t2 = t + 0.18, b2 = base * (0.96 + Math.random() * 0.1);
+          var o2 = ctx.createOscillator(); o2.type = 'sine'; var g2 = ctx.createGain();
+          o2.frequency.setValueAtTime(b2, t2);
+          o2.frequency.exponentialRampToValueAtTime(b2 * 1.4, t2 + 0.05);
+          g2.gain.setValueAtTime(0.0001, t2);
+          g2.gain.exponentialRampToValueAtTime(0.04, t2 + 0.02);
+          g2.gain.exponentialRampToValueAtTime(0.0001, t2 + 0.15);
+          o2.connect(g2); g2.connect(master); o2.start(t2); o2.stop(t2 + 0.18);
+        }
+      }
+      function scheduleBird() { birdT = setTimeout(function () { chirp(); scheduleBird(); }, 1600 + Math.random() * 5200); }
+      function fade(v) { if (!master) return; var t = ctx.currentTime; master.gain.cancelScheduledValues(t); master.gain.setTargetAtTime(v, t, 0.7); }
+      // ---- One-shot interaction SFX (routed through master so mute applies) ----
+      var _sfxNoise = null;
+      function sfxNoiseBuf() { if (!_sfxNoise) _sfxNoise = noise(); return _sfxNoise; }
+      function whoosh(intensity) {
+        if (!ctx || muted) return;
+        var t = ctx.currentTime;
+        var src = ctx.createBufferSource(); src.buffer = sfxNoiseBuf(); src.loop = false;
+        src.playbackRate.value = 0.8 + Math.random() * 0.3;
+        var f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 0.7;
+        f.frequency.setValueAtTime(220, t);
+        f.frequency.exponentialRampToValueAtTime(1100, t + 0.18);
+        f.frequency.exponentialRampToValueAtTime(300, t + 0.5);
+        var g = ctx.createGain();
+        var peak = 0.05 * (intensity || 1); if (peak > 0.11) peak = 0.11; if (peak < 0.012) peak = 0.012;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(peak, t + 0.08);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+        src.connect(f); f.connect(g); g.connect(master); src.start(t); src.stop(t + 0.62);
+      }
+      function tick() {
+        if (!ctx || muted) return;
+        var t = ctx.currentTime;
+        var o = ctx.createOscillator(); o.type = 'triangle';
+        o.frequency.setValueAtTime(620, t);
+        o.frequency.exponentialRampToValueAtTime(910, t + 0.04);
+        var lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1800;
+        var g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.045, t + 0.008);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+        o.connect(lp); lp.connect(g); g.connect(master); o.start(t); o.stop(t + 0.15);
+      }
+      function chord() {
+        if (!ctx || muted) return;
+        var t = ctx.currentTime, fr = [392.0, 523.25, 659.25];
+        for (var i = 0; i < fr.length; i++) {
+          var o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = fr[i];
+          var g = ctx.createGain();
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(0.055, t + 0.04 + i * 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.95);
+          o.connect(g); g.connect(master); o.start(t); o.stop(t + 1.0);
+        }
+      }
+      return {
+        sfxWhoosh: whoosh,
+        sfxHover: tick,
+        sfxClick: chord,
+        start: function () {
+          if (started) return; started = true;
+          try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+          master = ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination);
+          var wind = loopNoise('lowpass', 470, 0.6, 0.34);
+          loopNoise('bandpass', 2300, 0.7, 0.016);
+          var lfo = ctx.createOscillator(); lfo.frequency.value = 0.06;
+          var lg = ctx.createGain(); lg.gain.value = 230; lfo.connect(lg); lg.connect(wind.filter.frequency); lfo.start();
+          var lfo2 = ctx.createOscillator(); lfo2.frequency.value = 0.085;
+          var lg2 = ctx.createGain(); lg2.gain.value = 0.12; lfo2.connect(lg2); lg2.connect(wind.gain.gain); lfo2.start();
+          scheduleBird();
+          fade(vol);
+        },
+        toggle: function () {
+          if (!ctx) return muted;
+          muted = !muted; fade(muted ? 0 : vol);
+          if (ctx.state === 'suspended') ctx.resume();
+          return muted;
+        },
+        resume: function () { if (ctx && ctx.state === 'suspended') ctx.resume(); }
+      };
+    })();
+
+    function enterSite() {
+      if (entered) return; entered = true;
+      var ld = document.getElementById('loader');
+      if (ld) ld.classList.add('hide');
+      document.documentElement.style.overflow = '';
+      resetToTop();
+      Ambience.start();
+      var at = document.getElementById('audio-toggle');
+      if (at) at.classList.add('show');
+      var nv = document.getElementById('chapter-nav');
+      if (nv) nv.classList.add('show');
+      document.removeEventListener('keydown', onEnterKey);
+    }
+    function onEnterKey(e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      var ld = document.getElementById('loader');
+      if (ld && ld.classList.contains('ready')) { e.preventDefault(); enterSite(); }
+    }
+    (function () {
+      var b = document.getElementById('enter-btn');
+      if (b) b.addEventListener('click', enterSite);
+      document.addEventListener('keydown', onEnterKey);
+      var at = document.getElementById('audio-toggle');
+      if (at) at.addEventListener('click', function () { var m = Ambience.toggle(); at.classList.toggle('muted', m); });
+      document.addEventListener('visibilitychange', function () { if (!document.hidden) Ambience.resume(); });
+    })();
+
+    // ---- Device advisory: detect phone vs tablet and recommend a larger
+    // screen for the full experience (never shown on laptop / desktop). ----
+    (function () {
+      var note = document.getElementById('device-note');
+      if (!note) return;
+      var ua = navigator.userAgent || '';
+      var minSide = Math.min(screen.width || 9999, screen.height || 9999);
+      // iPadOS 13+ masquerades as desktop Safari, so check touch + platform too.
+      var iPadOS = (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+      var tablet = iPadOS || /iPad|Tablet|PlayBook|Silk|Kindle/i.test(ua) || (/Android/i.test(ua) && !/Mobile/i.test(ua));
+      var kind = 'desktop';
+      if (coarse || isMobile || iPadOS) { kind = (tablet || minSide >= 600) ? 'tablet' : 'phone'; }
+      if (kind === 'desktop') return;
+      var kindEl = document.getElementById('device-note-kind');
+      if (kindEl) kindEl.textContent = (kind === 'tablet') ? 'a tablet' : 'a phone';
+      note.classList.add('on');
+    })();
+
+    // ---- Forest ink cursor: a gooey moss-green dot trail that chases the
+    // pointer and gently floats when idle (fine-pointer / non-touch only). ----
+    (function () {
+      var fine = window.matchMedia && window.matchMedia('(pointer: fine)').matches;
+      if (!fine) return;
+      var host = document.getElementById('ink-cursor');
+      if (!host) return;
+      document.body.classList.add('has-cursor');
+      var AMOUNT = 18, SINE_DOTS = Math.floor(AMOUNT * 0.3), DOT = 24, IDLE_MS = 150, CHASE = 0.35;
+      var mouse = { x: -300, y: -300 }, dots = [], idle = false, idleID = null;
+      function Dot(i) {
+        this.index = i; this.x = -300; this.y = -300;
+        this.scale = 1 - 0.05 * i;
+        this.range = DOT / 2 - (DOT / 2) * this.scale + 2;
+        this.anglespeed = 0.05; this.angleX = 0; this.angleY = 0; this.lockX = 0; this.lockY = 0;
+        var el = document.createElement('span');
+        var op = Math.max(0.72 - i * 0.026, 0.1);
+        el.style.background = 'rgba(150,196,128,' + op.toFixed(2) + ')';
+        this.el = el; host.appendChild(el);
+      }
+      Dot.prototype.lock = function () {
+        this.lockX = this.x; this.lockY = this.y;
+        this.angleX = Math.PI * 2 * Math.random(); this.angleY = Math.PI * 2 * Math.random();
+      };
+      Dot.prototype.draw = function () {
+        if (idle && this.index > SINE_DOTS) {
+          this.angleX += this.anglespeed; this.angleY += this.anglespeed;
+          this.x = this.lockX + Math.sin(this.angleX) * this.range;
+          this.y = this.lockY + Math.sin(this.angleY) * this.range;
+        }
+        this.el.style.transform = 'translate(calc(' + this.x + 'px - 50%), calc(' + this.y + 'px - 50%)) scale(' + this.scale.toFixed(3) + ')';
+      };
+      for (var di = 0; di < AMOUNT; di++) dots.push(new Dot(di));
+      function resetIdle() {
+        clearTimeout(idleID); idle = false;
+        idleID = setTimeout(function () { idle = true; for (var k = 0; k < dots.length; k++) dots[k].lock(); }, IDLE_MS);
+      }
+      (function loop() {
+        var x = mouse.x, y = mouse.y;
+        for (var i = 0; i < dots.length; i++) {
+          var dot = dots[i], next = dots[i + 1] || dots[0];
+          dot.x = x; dot.y = y;
+          if (!idle || i <= SINE_DOTS) { x += (next.x - dot.x) * CHASE; y += (next.y - dot.y) * CHASE; }
+          dot.draw();
+        }
+        requestAnimationFrame(loop);
+      })();
+      window.addEventListener('pointermove', function (e) { mouse.x = e.clientX; mouse.y = e.clientY; resetIdle(); }, { passive: true });
+    })();
+
+    // ============================================================
+    // VIDEO -> CANVAS  (display is ALWAYS scroll-driven; never live)
+    // ============================================================
+    var video = document.getElementById('forest');
+    var canvas = document.getElementById('video-canvas');
+    var ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+    var DPR = maxDPR();
+    var loader = document.getElementById('loader');
+    var loaderHidden = false;
+
+    var hasRVFC = ('requestVideoFrameCallback' in HTMLVideoElement.prototype);
+    var CAPTURE_MAX = isMobile ? 720 : 1000;
+    var MAX_FRAMES  = isMobile ? 80 : 140;
+    // Harvest faster than realtime so the loader resolves quickly (only when
+    // requestVideoFrameCallback is available; the timeupdate fallback needs 1x).
+    var HARVEST_RATE = hasRVFC ? (isMobile ? 2 : 3) : 1;
+    var HEAD_TRIM = 0.04, TAIL_TRIM = 0.08; // fallback trim when pixels can't be read
+    var COVER_T = 0.92; // harvest done once playback covers this fraction of duration
+    var SMOOTH = 0.2;   // base easing per 60fps-frame (made frame-rate independent)
+    var capCw = 0, capCh = 0;
+    var duration = 0;
+    var numFrames = 0;
+    var frames = [];
+    var blackMark = null;
+    var filled = 0;
+    var maxT = 0;
+    var firstGood = 0, lastGood = 0;
+    var capturing = false;
+    var framesReady = false;
+    var initStarted = false, initialReady = false;
+
+    var smoothed = 0;
+    var textSmoothed = 0;
+    var lastI0 = -2, lastFrac = -1;
+    var dirty = true;
+
+    function sizeVideoCanvas() {
+      DPR = maxDPR();
+      canvas.width = Math.floor(window.innerWidth * DPR);
+      canvas.height = Math.floor(window.innerHeight * DPR);
+      // Display via CSS percentages (not fixed px) so the canvas keeps fully
+      // covering the viewport during the brief moments the mobile URL bar
+      // animates, even though we debounce the actual buffer reallocation.
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      dirty = true;
+      drawDisplay();
+    }
+
+    function computeCaptureSize() {
+      var vw = video.videoWidth, vh = video.videoHeight;
+      if (!vw || !vh) { capCw = CAPTURE_MAX; capCh = Math.round(CAPTURE_MAX * 9 / 16); return; }
+      if (vw >= vh) { capCw = Math.min(vw, CAPTURE_MAX); capCh = Math.round(capCw * vh / vw); }
+      else { capCh = Math.min(vh, CAPTURE_MAX); capCw = Math.round(capCh * vw / vh); }
+    }
+
+    // whole-number destination coords (MDN canvas perf tip)
+    function coverDraw(src, sw, sh) {
+      var cw = canvas.width, ch = canvas.height;
+      var scale = Math.max(cw / sw, ch / sh);
+      var dw = Math.round(sw * scale), dh = Math.round(sh * scale);
+      var dx = Math.round((cw - dw) / 2), dy = Math.round((ch - dh) / 2);
+      try { ctx.drawImage(src, dx, dy, dw, dh); } catch (e) {}
+    }
+    function hideLoader() {
+      if (loaderHidden) return;
+      var bf = document.getElementById('l-bar-fill'); if (bf) bf.style.width = '100%';
+      var pc = document.getElementById('l-pct'); if (pc) pc.textContent = '100%';
+      loaderHidden = true;
+      // Everything is ready: reveal the cinematic "Enter" gate and wait for a
+      // user gesture (which also unlocks audio autoplay).
+      loader.classList.add('ready');
+    }
+    var _lPct = null, _lBar = null;
+    function updateLoaderProgress(p) {
+      if (loaderHidden) return;
+      if (!_lPct) { _lPct = document.getElementById('l-pct'); _lBar = document.getElementById('l-bar-fill'); }
+      var v = Math.max(0, Math.min(0.99, p));
+      if (_lPct) _lPct.textContent = Math.round(v * 100) + '%';
+      if (_lBar) _lBar.style.width = (v * 100) + '%';
+    }
+    function makeFrame() {
+      var c = document.createElement('canvas');
+      c.width = capCw; c.height = capCh;
+      c.getContext('2d').drawImage(video, 0, 0, capCw, capCh);
+      return c;
+    }
+
+    function isUsable(i) { return !!frames[i] && !(blackMark && blackMark[i]); }
+    function getFrameAt(idx) {
+      if (isUsable(idx)) return frames[idx];
+      for (var d = 1; d < numFrames; d++) {
+        var a = idx + d; if (a < numFrames && isUsable(a)) return frames[a];
+        var b = idx - d; if (b >= 0 && isUsable(b)) return frames[b];
+      }
+      for (var w = 0; w < numFrames; w++) { if (isUsable(w)) return frames[w]; }
+      return frames[idx] || null;
+    }
+
+    // Draw the scroll position by CROSS-FADING the two nearest frames.
+    function drawDisplay() {
+      var cw = canvas.width, ch = canvas.height;
+      if (filled > 0 && numFrames > 0) {
+        var span = lastGood - firstGood; if (span < 1) span = 1;
+        var fpos = firstGood + smoothed * span;
+        if (fpos < firstGood) fpos = firstGood; if (fpos > lastGood) fpos = lastGood;
+        var i0 = Math.floor(fpos);
+        var frac = fpos - i0;
+        var i1 = (i0 + 1 > lastGood) ? i0 : i0 + 1;
+        if (!dirty && i0 === lastI0 && Math.abs(frac - lastFrac) < 0.004) return;
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#060905'; ctx.fillRect(0, 0, cw, ch);
+        var f0 = getFrameAt(i0);
+        if (f0) coverDraw(f0, f0.width, f0.height);
+        if (frac > 0.001 && i1 !== i0) {
+          var f1 = getFrameAt(i1);
+          if (f1 && f1 !== f0) { ctx.globalAlpha = frac; coverDraw(f1, f1.width, f1.height); ctx.globalAlpha = 1; }
+        }
+        lastI0 = i0; lastFrac = frac; dirty = false;
+      } else {
+        ctx.fillStyle = '#060905'; ctx.fillRect(0, 0, cw, ch);
+      }
+    }
+
+    // ---- background harvest (coverage-based completion) ----
+    function storeBucket(t) {
+      if (!video.videoWidth || !duration) return;
+      if (t > maxT) maxT = t;
+      var idx = Math.floor((t / duration) * numFrames);
+      if (idx < 0) idx = 0; if (idx >= numFrames) idx = numFrames - 1;
+      if (!frames[idx]) { frames[idx] = makeFrame(); filled++; dirty = true; }
+      updateLoaderProgress(Math.max(maxT / (duration * COVER_T), filled / numFrames));
+      if (filled >= numFrames || (maxT >= duration * COVER_T && filled >= 16)) finishCapture();
+    }
+
+    function setupCapture() {
+      if (capturing || framesReady) return;
+      duration = (isFinite(video.duration) && video.duration > 0) ? video.duration : 0;
+      if (!duration) return;
+      computeCaptureSize();
+      numFrames = Math.min(MAX_FRAMES, Math.max(48, Math.round(duration * 30)));
+      frames = new Array(numFrames); filled = 0; maxT = 0;
+      firstGood = Math.min(numFrames - 1, Math.round(numFrames * HEAD_TRIM));
+      lastGood = Math.max(firstGood + 1, numFrames - 1 - Math.round(numFrames * TAIL_TRIM));
+      if (lastGood > numFrames - 1) lastGood = numFrames - 1;
+      capturing = true;
+      try { video.playbackRate = HARVEST_RATE; } catch (e) {}
+      if (hasRVFC) video.requestVideoFrameCallback(onCaptureFrame);
+      else video.addEventListener('timeupdate', onCaptureTick);
+      setTimeout(function () {
+        if (!framesReady && filled >= 24) finishCapture();
+      }, Math.max(12000, duration * 1500));
+    }
+
+    function onCaptureFrame(now, meta) {
+      if (!capturing) return;
+      storeBucket(meta ? meta.mediaTime : video.currentTime);
+      if (capturing) video.requestVideoFrameCallback(onCaptureFrame);
+    }
+    function onCaptureTick() { if (capturing) storeBucket(video.currentTime); }
+
+    function refineBlackRange() {
+      var rc = document.createElement('canvas'); rc.width = 8; rc.height = 8;
+      var rctx = rc.getContext('2d');
+      var lum = new Array(numFrames); var canRead = true;
+      for (var i = 0; i < numFrames; i++) {
+        if (!frames[i]) { lum[i] = -1; continue; }
+        try {
+          rctx.drawImage(frames[i], 0, 0, 8, 8);
+          var d = rctx.getImageData(0, 0, 8, 8).data;
+          var s = 0; for (var p = 0; p < d.length; p += 4) { s += d[p] + d[p + 1] + d[p + 2]; }
+          lum[i] = s / (64 * 3);
+        } catch (e) { canRead = false; break; }
+      }
+      if (!canRead) return; // keep fixed trim
+      var TH = 14; blackMark = new Array(numFrames);
+      for (var j = 0; j < numFrames; j++) blackMark[j] = (lum[j] >= 0 && lum[j] < TH);
+      var fg = 0, lg = numFrames - 1;
+      while (fg < lg && (!frames[fg] || blackMark[fg])) fg++;
+      while (lg > fg && (!frames[lg] || blackMark[lg])) lg--;
+      if (lg - fg >= 8) { firstGood = fg; lastGood = lg; }
+    }
+
+    function finishCapture() {
+      if (framesReady) return;
+      capturing = false;
+      video.removeEventListener('timeupdate', onCaptureTick);
+      framesReady = true;
+      refineBlackRange();
+      dirty = true;
+      try { video.pause(); } catch (e) {}
+      hideLoader();
+    }
+
+    // ---- initial still: grab a frame past the fade-in, then start harvest ----
+    function tryHarvestPlay() {
+      if (framesReady) return;
+      try { video.playbackRate = HARVEST_RATE; } catch (e) {}
+      var p = video.play();
+      if (p && p.then) p.catch(function () {});
+    }
+    function captureInitialFrame() {
+      if (initStarted || framesReady || !numFrames || !video.videoWidth) return;
+      initStarted = true;
+      var seekT = Math.min(duration * 0.5, Math.max(0.4, duration * 0.08));
+      var done = false;
+      function grab() {
+        if (done) return; done = true;
+        video.removeEventListener('seeked', grab);
+        if (video.videoWidth && duration) {
+          var idx = Math.floor((video.currentTime / duration) * numFrames);
+          if (idx < 0) idx = 0; if (idx >= numFrames) idx = numFrames - 1;
+          if (!frames[idx]) { frames[idx] = makeFrame(); filled++; }
+          initialReady = true; dirty = true; drawDisplay();
+        }
+        try { video.currentTime = 0; } catch (e) {}
+        maxT = 0;
+        tryHarvestPlay();
+      }
+      video.addEventListener('seeked', grab);
+      try { video.currentTime = seekT; } catch (e) { grab(); }
+      setTimeout(function () { if (!done) grab(); }, 2500);
+    }
+
+    video.addEventListener('loadedmetadata', function () { computeCaptureSize(); setupCapture(); captureInitialFrame(); });
+    video.addEventListener('loadeddata', function () { setupCapture(); captureInitialFrame(); });
+    video.addEventListener('canplay', function () { setupCapture(); if (!initStarted) captureInitialFrame(); });
+    ['pointerdown', 'touchstart', 'wheel', 'keydown'].forEach(function (ev) {
+      window.addEventListener(ev, function () {
+        if (framesReady) return;
+        if (!initStarted) captureInitialFrame();
+        else if (video.paused) tryHarvestPlay();
+      }, { passive: true });
+    });
+    setTimeout(hideLoader, 12000);
+
+    // ============================================================
+    // 3D TEXT SCENE  (real extruded geometry; scroll-driven fly-through)
+    // ------------------------------------------------------------
+    //  - Each line is a true TextGeometry mesh with depth + bevel.
+    //  - PBR MeshStandardMaterial + a procedural RoomEnvironment give
+    //    premium metallic reflections WITHOUT shipping any HDR asset.
+    //  - The camera is a pure function of the smoothed scroll, so the
+    //    fly-through is perfectly reversible and loop-safe; scroll
+    //    VELOCITY drives FOV punch + a subtle banking roll for a real
+    //    sense of acceleration. Fog dissolves depth for a clean tunnel.
+    // ============================================================
+    var fallback = document.getElementById('panel-fallback');
+    var scene3dReady = false;
+    var update3d = function () {};
+    var resize3d = function () {};
+
+    (function init3D() {
+      if (reduceMotion || !window.THREE || !THREE.TextGeometry || !THREE.FontLoader) {
+        if (fallback) fallback.classList.add('show'); // graceful static hero
+        return;
+      }
+      var canvas3 = document.getElementById('text3d');
+      var renderer;
+      try {
+        renderer = new THREE.WebGLRenderer({ canvas: canvas3, alpha: true, antialias: !isMobile, powerPreference: 'high-performance' });
+      } catch (e) {
+        if (fallback) fallback.classList.add('show');
+        return;
+      }
+      renderer.setPixelRatio(maxDPR());
+      renderer.setSize(window.innerWidth, window.innerHeight, false);
+      renderer.setClearColor(0x000000, 0);
+      if ('outputEncoding' in renderer) renderer.outputEncoding = THREE.sRGBEncoding;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.05;
+
+      var scene = new THREE.Scene();
+      scene.fog = new THREE.Fog(0x060905, 22, 96);
+
+      // Aspect-aware field of view keeps the 3D text framed on ANY screen.
+      // On displays narrower than the reference (portrait phones), widen the
+      // vertical FOV so the horizontal extent of the words stays visible rather
+      // than getting cropped — the "object-fit: contain" trick for a perspective
+      // camera. Recomputed on every resize/orientation change (see resize3d).
+      var DESIGN_FOV = isMobile ? 58 : 52;
+      function computeBaseFov() {
+        var asp = window.innerWidth / window.innerHeight;
+        if (asp >= REF_ASPECT) return DESIGN_FOV;
+        var hHalf = Math.atan(Math.tan(DESIGN_FOV * Math.PI / 360) * REF_ASPECT);
+        var v = 2 * Math.atan(Math.tan(hHalf) / asp) * 180 / Math.PI;
+        return Math.min(v, 88);
+      }
+      var BASE_FOV = computeBaseFov();
+      var camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.1, 600);
+      camera.position.set(0, 0, 8);
+
+      // Premium reflections from a procedural room (no external HDR file).
+      try {
+        var pmrem = new THREE.PMREMGenerator(renderer);
+        scene.environment = pmrem.fromScene(new THREE.RoomEnvironment(), 0.04).texture;
+      } catch (e) {}
+
+      scene.add(new THREE.AmbientLight(0xbfcbb6, 0.5));
+      var key = new THREE.DirectionalLight(0xffffff, 1.1); key.position.set(4, 6, 8); scene.add(key);
+      var accentL = new THREE.PointLight(0x8fb882, 1.4, 70); accentL.position.set(-6, -2, 6); scene.add(accentL);
+
+      var group = new THREE.Group(); scene.add(group);
+      var ACCENT = 0x8fb882;
+
+      // text, depth(z, into screen), x, y, size, kind
+      // Wide depth spacing: usually a single line owns the frame, so each one
+      // is fully readable and emerges on its own like a film title card.
+      var SPEC = [
+        { t: 'PORTFOLIO / 2026',  z: -8,   x: 0,    y: 2.6,  s: 0.62, k: 'label' },
+        { t: 'Bosithon',          z: -52,  x: 0,    y: 0,    s: 4.6,  k: 'hero' },
+        { t: 'ENGINEER / DEVELOPER / BUILDER', z: -64, x: 0, y: -2.0, s: 0.6, k: 'label' },
+        { t: 'CREATE',            z: -78,  x: -6.8, y: 2.0,  s: 2.0,  k: 'word' },
+        { t: 'Open to unique,',   z: -92,  x: 0,    y: 0.9,  s: 2.0,  k: 'hero' },
+        { t: 'impossible problems.', z: -98, x: 0,  y: -1.5, s: 1.9,  k: 'hero' },
+        { t: 'SOLVE',             z: -112, x: 6.6,  y: -2.1, s: 2.0,  k: 'word' },
+        { t: 'I build fast, beautiful interfaces', z: -126, x: 0, y: 0.7, s: 0.62, k: 'label' },
+        { t: 'and chase problems no one wants to touch.', z: -132, x: 0, y: -0.9, s: 0.62, k: 'label' },
+        { t: 'BUILD',             z: -146, x: -6.2, y: 2.1,  s: 2.0,  k: 'word' },
+
+        // Interactive contact menu = the final resting screen. Hover fogs the
+        // color; click smoothly fades out and opens the link. EDIT THESE URLs:
+        { t: 'GitHub',    z: -170, x: 0, y: 2.3,  s: 0.95, k: 'social', social: true, url: 'https://github.com/' },
+        { t: 'Telegram',  z: -170, x: 0, y: 0.8,  s: 0.95, k: 'social', social: true, url: 'https://t.me/' },
+        { t: 'LinkedIn',  z: -170, x: 0, y: -0.7, s: 0.95, k: 'social', social: true, url: 'https://www.linkedin.com/' },
+        { t: 'Instagram', z: -170, x: 0, y: -2.2, s: 0.95, k: 'social', social: true, url: 'https://www.instagram.com/' },
+
+        // A separate, deeper beacon reached AFTER the contacts fade away: a glowing,
+        // slowly-pulsing "Anonym" call-to-action, centered, that hints to be clicked.
+        // Opens the anonymous message space (built next).
+        { t: 'Anonym', z: -206, x: 0, y: 0.2, s: 1.5, k: 'social', social: true, anon: true, sameTab: true, url: './anonymous.html' },
+        { t: 'tap to whisper a secret', z: -206, x: 0, y: -1.5, s: 0.5, k: 'label', anonHint: true }
+      ];
+
+      var Z_NEAR = 8, Z_END = -194;
+      var items = [];
+      var socialHits = [];
+
+      // Soft radial sprite reused as an additive "bloom" halo behind bright text.
+      var _glowTex = (function () {
+        var c = document.createElement('canvas'); c.width = c.height = 128;
+        var g = c.getContext('2d');
+        var rg = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+        rg.addColorStop(0, 'rgba(255,255,255,1)');
+        rg.addColorStop(0.25, 'rgba(255,255,255,0.55)');
+        rg.addColorStop(1, 'rgba(255,255,255,0)');
+        g.fillStyle = rg; g.fillRect(0, 0, 128, 128);
+        var t = new THREE.CanvasTexture(c);
+        if ('encoding' in t) t.encoding = THREE.sRGBEncoding;
+        return t;
+      })();
+      function glowStrength(kind) {
+        if (kind === 'social') return 0.55;
+        if (kind === 'hero') return 0.5;
+        if (kind === 'word') return 0.42;
+        return 0.0;
+      }
+      function glowColor(kind) {
+        return (kind === 'hero') ? new THREE.Color(0xdfe9d6) : new THREE.Color(ACCENT);
+      }
+      function makeMaterial(kind) {
+        if (kind === 'social') {
+          return new THREE.MeshStandardMaterial({ color: 0xe9efe6, metalness: 0.72, roughness: 0.24, envMapIntensity: 1.35, emissive: 0x223019, emissiveIntensity: 0.4, transparent: true, opacity: 1 });
+        }
+        if (kind === 'hero') {
+          return new THREE.MeshStandardMaterial({ color: 0xf2f5ef, metalness: 0.9, roughness: 0.16, envMapIntensity: 1.5, transparent: true, opacity: 1 });
+        }
+        if (kind === 'word') {
+          return new THREE.MeshStandardMaterial({ color: ACCENT, metalness: 0.65, roughness: 0.3, envMapIntensity: 1.2, emissive: 0x223019, emissiveIntensity: 0.55, transparent: true, opacity: 0.58 });
+        }
+        return new THREE.MeshStandardMaterial({ color: 0xc4d4ba, metalness: 0.4, roughness: 0.5, envMapIntensity: 1.0, transparent: true, opacity: 0.9 });
+      }
+
+      // ============================================================
+      //  SIGNATURE ATMOSPHERE: floating dust, god-ray shafts, and a
+      //  "name dissolves into dust" burst as you fly through the hero.
+      //  All additive + alpha-safe (only ever ADD light over the forest),
+      //  and only animated while the scene is already rendering (frozen at
+      //  rest, matching the frozen-forest aesthetic = zero idle cost).
+      // ============================================================
+      var HERO_Z = -52;
+      var dustT = 0;
+
+      // -- Floating dust motes through the whole tunnel volume --
+      var DUST_N = isMobile ? 170 : 430;
+      var dustGeo = new THREE.BufferGeometry();
+      var dpos = new Float32Array(DUST_N * 3);
+      var dustData = [];
+      for (var di = 0; di < DUST_N; di++) {
+        var dx0 = (Math.random() * 2 - 1) * 13;
+        var dy0 = (Math.random() * 2 - 1) * 7.5;
+        var dz0 = Z_END + Math.random() * (Z_NEAR - Z_END);
+        dpos[di * 3] = dx0; dpos[di * 3 + 1] = dy0; dpos[di * 3 + 2] = dz0;
+        dustData.push({ bx: dx0, by: dy0, ph: Math.random() * 6.283, sp: 0.2 + Math.random() * 0.5, am: 0.12 + Math.random() * 0.4 });
+      }
+      dustGeo.setAttribute('position', new THREE.BufferAttribute(dpos, 3));
+      var dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({
+        size: isMobile ? 0.10 : 0.075, map: _glowTex, color: 0xbfd3b0,
+        transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending,
+        depthWrite: false, sizeAttenuation: true
+      }));
+      dust.frustumCulled = false; scene.add(dust);
+
+      // -- God-ray light shafts (soft vertical gradient planes) --
+      var _rayTex = (function () {
+        var c = document.createElement('canvas'); c.width = 48; c.height = 256;
+        var g = c.getContext('2d');
+        var lg = g.createLinearGradient(0, 0, 0, 256);
+        lg.addColorStop(0, 'rgba(255,255,255,0.55)');
+        lg.addColorStop(0.5, 'rgba(255,255,255,0.18)');
+        lg.addColorStop(1, 'rgba(255,255,255,0)');
+        g.fillStyle = lg; g.fillRect(0, 0, 48, 256);
+        var hg = g.createLinearGradient(0, 0, 48, 0);
+        hg.addColorStop(0, 'rgba(0,0,0,1)'); hg.addColorStop(0.5, 'rgba(0,0,0,0)'); hg.addColorStop(1, 'rgba(0,0,0,1)');
+        g.globalCompositeOperation = 'destination-out'; g.fillStyle = hg; g.fillRect(0, 0, 48, 256);
+        return new THREE.CanvasTexture(c);
+      })();
+      var rays = [];
+      var RAY_DEFS = [
+        { x: -5, y: 4, z: -42, w: 5, h: 44, rot: 0.18, op: 0.06 },
+        { x: 4, y: 5, z: -82, w: 6, h: 52, rot: -0.13, op: 0.05 },
+        { x: -2, y: 6, z: -122, w: 7, h: 62, rot: 0.09, op: 0.045 }
+      ];
+      for (var rj = 0; rj < RAY_DEFS.length; rj++) {
+        var rd = RAY_DEFS[rj];
+        var rmesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(rd.w, rd.h),
+          new THREE.MeshBasicMaterial({ map: _rayTex, color: 0xe8e9cf, transparent: true, opacity: rd.op, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false })
+        );
+        rmesh.position.set(rd.x, rd.y, rd.z); rmesh.rotation.z = rd.rot; rmesh.renderOrder = -2;
+        scene.add(rmesh); rays.push({ m: rmesh, op: rd.op, ph: rj * 1.7 });
+      }
+
+      // -- Hero "Bosithon" dust-dissolve burst --
+      var PUFF_N = isMobile ? 90 : 190;
+      var puffGeo = new THREE.BufferGeometry();
+      var ppos = new Float32Array(PUFF_N * 3);
+      var puffDirs = [];
+      for (var pj = 0; pj < PUFF_N; pj++) {
+        var lx = (Math.random() * 2 - 1) * 5.6;
+        var ly = (Math.random() * 2 - 1) * 1.9;
+        var lz = (Math.random() * 2 - 1) * 0.6;
+        ppos[pj * 3] = lx; ppos[pj * 3 + 1] = ly; ppos[pj * 3 + 2] = lz;
+        var ang = Math.random() * 6.283, rr = 0.5 + Math.random();
+        puffDirs.push({ bx: lx, by: ly, bz: lz, dx: Math.cos(ang) * rr, dy: (ly > 0 ? 0.4 : -0.2) + (Math.random() * 2 - 1) * 0.6, dz: (Math.random() * 2 - 1) * rr });
+      }
+      puffGeo.setAttribute('position', new THREE.BufferAttribute(ppos, 3));
+      var puffMat = new THREE.PointsMaterial({
+        size: isMobile ? 0.16 : 0.13, map: _glowTex, color: 0xeef3e8,
+        transparent: true, opacity: 0, blending: THREE.AdditiveBlending,
+        depthWrite: false, sizeAttenuation: true
+      });
+      var heroPuff = new THREE.Points(puffGeo, puffMat);
+      heroPuff.position.set(0, 0, HERO_Z); heroPuff.frustumCulled = false;
+      group.add(heroPuff);
+
+      function updateAtmosphere(camZ, dt) {
+        dustT += dt * 0.001;
+        for (var i = 0; i < DUST_N; i++) {
+          var dd = dustData[i];
+          dpos[i * 3] = dd.bx + Math.sin(dustT * dd.sp + dd.ph) * dd.am;
+          dpos[i * 3 + 1] = dd.by + Math.cos(dustT * dd.sp * 0.8 + dd.ph) * dd.am * 0.8;
+        }
+        dustGeo.attributes.position.needsUpdate = true;
+        for (var r = 0; r < rays.length; r++) {
+          rays[r].m.material.opacity = rays[r].op * (0.65 + 0.35 * Math.sin(dustT * 0.6 + rays[r].ph));
+        }
+        // Hero dissolve: faint shimmer on approach, scatter-burst on pass-through.
+        var heroDist = camZ - HERO_Z;
+        var scat = heroDist < 9 ? (1 - heroDist / 9) : 0; if (scat < 0) scat = 0; if (scat > 1) scat = 1;
+        var appro = (40 - heroDist) / 30; if (appro < 0) appro = 0; if (appro > 1) appro = 1;
+        var burst = scat * (1 - scat) * 4; if (burst > 1) burst = 1;
+        var puffOp = Math.max(appro * 0.22, burst * 0.9);
+        if (heroDist < 0.4) puffOp = 0;
+        puffMat.opacity = puffOp;
+        if (puffOp > 0.001) {
+          for (var p = 0; p < PUFF_N; p++) {
+            var pd = puffDirs[p];
+            ppos[p * 3] = pd.bx + pd.dx * scat * 6;
+            ppos[p * 3 + 1] = pd.by + pd.dy * scat * 6;
+            ppos[p * 3 + 2] = pd.bz + pd.dz * scat * 6;
+          }
+          puffGeo.attributes.position.needsUpdate = true;
+        }
+      }
+
+      function buildWith(fontHero, fontSans) {
+        for (var i = 0; i < SPEC.length; i++) {
+          var sp = SPEC[i];
+          var font = (sp.k === 'hero') ? fontHero : fontSans;
+          var geo = new THREE.TextGeometry(sp.t, {
+            font: font, size: sp.s, height: sp.s * 0.16, curveSegments: 6,
+            bevelEnabled: true, bevelThickness: sp.s * 0.03, bevelSize: sp.s * 0.02, bevelSegments: 3
+          });
+          geo.computeBoundingBox();
+          var bb = geo.boundingBox;
+          var bw = bb.max.x - bb.min.x, bh = bb.max.y - bb.min.y;
+          geo.translate(-0.5 * bw, -0.5 * bh, 0);
+          var mat = makeMaterial(sp.k);
+          if (sp.anon) { mat.color.set(0xcdeabf); mat.emissive.set(0x3a6b2a); mat.emissiveIntensity = 0.7; }
+          if (sp.anonHint) { mat.color.set(0xbfe6a8); }
+          var mesh = new THREE.Mesh(geo, mat);
+          mesh.position.set(sp.x, sp.y, sp.z);
+          mesh.userData = { z: sp.z, baseOp: mat.opacity, mat: mat, baseY: sp.y, baseX: sp.x };
+          if (sp.anon) mesh.userData.anon = true;
+          if (sp.anonHint) mesh.userData.anonHint = true;
+          if (sp.sameTab) mesh.userData.sameTab = true;
+          // Additive bloom halo (alpha-safe: only ever ADDS light over the forest).
+          var gStr = sp.social ? 0.55 : glowStrength(sp.k);
+          if (gStr > 0) {
+            var gmat = new THREE.MeshBasicMaterial({ map: _glowTex, color: glowColor(sp.k), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false });
+            var glow = new THREE.Mesh(new THREE.PlaneGeometry(bw * 1.1 + bh * 1.2, bh * 2.6), gmat);
+            glow.position.z = -0.05; glow.renderOrder = -1;
+            mesh.add(glow);
+            mesh.userData.glow = gmat; mesh.userData.glowStr = gStr;
+          }
+          if (sp.social) {
+            mesh.userData.social = true;
+            mesh.userData.url = sp.url;
+            mesh.userData.hov = 0;
+            mesh.userData.clickT = 0;
+            mesh.userData.magX = 0;
+            mesh.userData.magY = 0;
+            mesh.userData.baseColor = mat.color.clone();
+            mesh.userData.hoverColor = new THREE.Color(sp.anon ? 0xeafff0 : 0x767f72);
+            // Invisible padded plane gives a reliable hit area (text glyphs have gaps).
+            var hit = new THREE.Mesh(
+              new THREE.PlaneGeometry(bw + 0.8, bh + 0.7),
+              new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
+            );
+            hit.position.set(sp.x, sp.y, sp.z + 0.25);
+            hit.userData.target = mesh;
+            hit.userData.baseX = sp.x;
+            hit.userData.baseY = sp.y;
+            mesh.userData.hit = hit;
+            group.add(hit);
+            socialHits.push(hit);
+          }
+          group.add(mesh);
+          items.push(mesh);
+        }
+        scene3dReady = true;
+      }
+
+      var heroFont = null, sansFont = null;
+      var loaderF = new THREE.FontLoader();
+      var FONT_HERO = 'https://unpkg.com/three@0.147.0/examples/fonts/gentilis_regular.typeface.json';
+      var FONT_SANS = 'https://unpkg.com/three@0.147.0/examples/fonts/helvetiker_regular.typeface.json';
+      loaderF.load(FONT_HERO, function (f) { heroFont = f; if (sansFont) buildWith(heroFont, sansFont); });
+      loaderF.load(FONT_SANS, function (f) { sansFont = f; if (heroFont) buildWith(heroFont, sansFont); });
+
+      // ---- Hover / click interaction for the social links (raycast picking) ----
+      var ray = new THREE.Raycaster();
+      var ndc = new THREE.Vector2();
+      var hovered = null;
+      var navigating = false;
+      var navFade = document.getElementById('nav-fade');
+      // Eased pointer-parallax state (target + current).
+      var pTX = 0, pTY = 0, pX = 0, pY = 0;
+      var pCX = window.innerWidth / 2, pCY = window.innerHeight / 2;
+      var _proj = new THREE.Vector3();
+
+      function pickAt(cx, cy) {
+        if (!scene3dReady || !socialHits.length) return null;
+        ndc.x = (cx / window.innerWidth) * 2 - 1;
+        ndc.y = -(cy / window.innerHeight) * 2 + 1;
+        ray.setFromCamera(ndc, camera);
+        var hits = ray.intersectObjects(socialHits, false);
+        for (var i = 0; i < hits.length; i++) {
+          var tgt = hits[i].object.userData.target;
+          if (tgt && tgt.visible && tgt.userData.mat.opacity > 0.45) return tgt;
+        }
+        return null;
+      }
+      function triggerNav(mesh) {
+        if (navigating) return;
+        navigating = true;
+        Ambience.sfxClick();
+        mesh.userData.clickT = 1;
+        if (navFade) navFade.classList.add('on');
+        setTimeout(function () {
+          var u = mesh.userData.url;
+          // Internal pages (the Anonym space) navigate in the same tab.
+          if (mesh.userData.sameTab) { window.location.href = u; return; }
+          try { window.open(u, '_blank', 'noopener'); } catch (e) { window.location.href = u; }
+          if (navFade) navFade.classList.remove('on');
+          navigating = false;
+        }, 460);
+      }
+      window.addEventListener('pointermove', function (e) {
+        pCX = e.clientX; pCY = e.clientY;
+        pTX = (e.clientX / window.innerWidth) * 2 - 1;
+        pTY = (e.clientY / window.innerHeight) * 2 - 1;
+        restFrames = 6; // wake renders so magnetic links + cursor react smoothly
+        var h = pickAt(e.clientX, e.clientY);
+        if (h !== hovered) { hovered = h; document.body.classList.toggle('link-hover', !!h); if (h) Ambience.sfxHover(); }
+      }, { passive: true });
+      window.addEventListener('click', function (e) {
+        var h = pickAt(e.clientX, e.clientY);
+        if (h) triggerNav(h);
+      });
+
+      // Scene fades in once at the start, then holds (no loop-out) so the
+      // contact menu stays put as a stable, interactive end state.
+      function envelope(cp) {
+        if (cp < 0.02) return cp / 0.02;
+        return 1;
+      }
+      // Smoothstep: gentle, filmic ease for the per-line reveal.
+      function smooth(t) { t = t < 0 ? 0 : (t > 1 ? 1 : t); return t * t * (3 - 2 * t); }
+
+      var prevIntro = 0, rollEase = 0, fovEase = BASE_FOV, restFrames = 1, lastCamZ = 1e9, anonT = 0;
+      var blurEase = 0, lastBlur = -1, dofOn = !isMobile;
+
+      update3d = function (smoothedCp, dt, scrollRaw) {
+        if (!scene3dReady) return;
+        var env = envelope(smoothedCp);
+
+        // Camera path: pure function of smoothed scroll (reversible + loop-safe).
+        var introT = smoothedCp < 0 ? 0 : (smoothedCp > 1 ? 1 : smoothedCp);
+        var camZ = Z_NEAR + (Z_END - Z_NEAR) * introT;
+
+        // Velocity (change in introT this frame) -> premium speed cues.
+        var vel = introT - prevIntro;
+        prevIntro = introT;
+        var speed = Math.abs(vel);
+
+        var kk = 1 - Math.pow(0.0015, dt / 1000); // time-based ease
+        var fovTarget = BASE_FOV + Math.min(14, speed * 2600);
+        fovEase += (fovTarget - fovEase) * Math.min(1, kk * 1.3);
+        var rollTarget = Math.max(-0.05, Math.min(0.05, vel * 9));
+        rollEase += (rollTarget - rollEase) * Math.min(1, kk * 1.3);
+
+        // Pointer + scroll parallax (eased). Nearer text shifts more than far
+        // text, and the whole field floats over the static forest video = depth.
+        pX += (pTX - pX) * Math.min(1, kk * 0.9);
+        pY += (pTY - pY) * Math.min(1, kk * 0.9);
+        var camTX = Math.sin((scrollRaw || 0) * 0.0007) * 0.22 + pX * 0.85;
+        var camTY = -pY * 0.5;
+
+        // Depth-of-field rack focus: soft during fast fly-through, razor sharp
+        // once a line settles into the readable zone (clears to 0 at rest).
+        if (dofOn) {
+          var blurT = Math.min(2.4, speed * 950);
+          blurEase += (blurT - blurEase) * Math.min(1, kk * 1.4);
+          var bq = Math.round(blurEase * 5) / 5;
+          if (bq !== lastBlur) { canvas3.style.filter = bq > 0.05 ? ('blur(' + bq + 'px)') : ''; lastBlur = bq; }
+        }
+
+        var moving = Math.abs(camZ - lastCamZ) > 0.0008;
+        var parallaxBusy = Math.abs(camTX - camera.position.x) > 0.0008 || Math.abs(camTY - camera.position.y) > 0.0008;
+        if (moving || parallaxBusy || speed > 0.00001 || Math.abs(rollEase) > 0.0008 || blurEase > 0.06) restFrames = 6;
+        // Keep rendering while a link is hovered, animating back to rest, or navigating.
+        var socialBusy = (hovered !== null) || navigating;
+        if (!socialBusy) {
+          for (var sb = 0; sb < socialHits.length; sb++) {
+            var tmb = socialHits[sb].userData.target;
+            if (tmb.userData.hov > 0.004 || tmb.userData.clickT > 0.004 || Math.abs(tmb.userData.magX || 0) > 0.002 || Math.abs(tmb.userData.magY || 0) > 0.002) { socialBusy = true; break; }
+          }
+        }
+        if (socialBusy) restFrames = 6;
+        // Keep rendering while the final "Anonym" beacon is on screen so it
+        // can keep pulsing (only near the very end state = cheap, intended).
+        var anonDist = camZ + 206;
+        if (anonDist > 1 && anonDist < 40) restFrames = 6;
+        if (restFrames <= 0) return;
+        restFrames--;
+        anonT += dt;
+
+        camera.position.z = camZ;
+        camera.position.x = camTX;
+        camera.position.y = camTY;
+        camera.rotation.z = rollEase;
+        if (Math.abs(camera.fov - fovEase) > 0.01) { camera.fov = fovEase; camera.updateProjectionMatrix(); }
+        camera.updateMatrixWorld();
+
+        // Gate the "Anonym" beacon so it stays fully dark (no glow) until the
+        // contacts have flown past the camera, then fades in as the final screen.
+        var _ag = (-172 - camZ) / 16; if (_ag < 0) _ag = 0; else if (_ag > 1) _ag = 1;
+        var anonGate = _ag * _ag * (3 - 2 * _ag);
+
+        for (var i = 0; i < items.length; i++) {
+          var m = items[i];
+          var dist = camZ - m.userData.z; // >0 = ahead of camera
+          var op, appear = 1;
+          if (dist <= 0.6) { op = 0; appear = 1; }            // passed / behind camera
+          else if (dist < 7) { op = (dist - 0.6) / 6.4; }      // whoosh past the camera
+          else if (dist <= 52) { op = 1; }                     // held + fully readable
+          else if (dist < 86) {                                // filmic emerge from the fog
+            appear = smooth((86 - dist) / 34);
+            op = appear;
+          } else { op = 0; appear = 0; }                       // not yet arrived
+          var finalOp = op * env * m.userData.baseOp;
+          if (m.userData.anon || m.userData.anonHint) finalOp *= anonGate;
+          m.userData.mat.opacity = finalOp;
+          m.visible = finalOp > 0.003;
+          var anonPulse = (m.userData.anon || m.userData.anonHint) ? (0.5 + 0.5 * Math.sin(anonT * 0.0052 + (m.userData.anonHint ? -0.7 : 0))) : 0;
+          // Soft whoosh as a layer rushes past the camera (fires once per pass).
+          if (!m.userData.social) {
+            if (!m.userData.passed && dist < 2.6 && dist > -4 && speed > 0.0006) { m.userData.passed = true; Ambience.sfxWhoosh(Math.min(1, speed * 380)); }
+            else if (dist > 9) { m.userData.passed = false; }
+          }
+          var extra = 1;
+          if (m.userData.social) {
+            // Hover -> ease color toward a foggy tone; click -> brief punch.
+            var ht = (hovered === m) ? 1 : 0;
+            m.userData.hov += (ht - m.userData.hov) * Math.min(1, kk * 1.7);
+            if (m.userData.clickT > 0.0001) m.userData.clickT *= Math.pow(0.82, dt / 16.667); else m.userData.clickT = 0;
+            var hv = m.userData.hov;
+            m.userData.mat.color.copy(m.userData.baseColor).lerp(m.userData.hoverColor, hv * 0.85);
+            m.userData.mat.emissiveIntensity = 0.4 + hv * 0.55;
+            extra = 1 + hv * 0.12 + m.userData.clickT * 0.28;
+            // Magnetic pull toward the cursor (eased), moving glyph + hit-plane.
+            _proj.set(m.userData.baseX, m.userData.baseY, m.userData.z).project(camera);
+            var sxp = (_proj.x * 0.5 + 0.5) * window.innerWidth;
+            var syp = (-_proj.y * 0.5 + 0.5) * window.innerHeight;
+            var ddx = pCX - sxp, ddy = pCY - syp;
+            var ddist = Math.sqrt(ddx * ddx + ddy * ddy);
+            var R = 150, pull = ddist < R ? (1 - ddist / R) : 0;
+            var mtX = (ddx / R) * 0.7 * pull, mtY = -(ddy / R) * 0.6 * pull;
+            m.userData.magX += (mtX - m.userData.magX) * Math.min(1, kk * 1.6);
+            m.userData.magY += (mtY - m.userData.magY) * Math.min(1, kk * 1.6);
+          }
+          // Bloom halo tracks the line's visibility (and hover/click for links).
+          if (m.userData.glow) {
+            var gOp = finalOp * m.userData.glowStr;
+            if (m.userData.social) gOp *= (1 + m.userData.hov * 0.9 + m.userData.clickT * 1.2);
+            if (m.userData.anon) gOp *= (1 + anonPulse * 1.1);
+            m.userData.glow.opacity = gOp > 1 ? 1 : gOp;
+          }
+          // Contact-screen beacon: slow glow pulse + breathing to invite a click.
+          if (m.userData.anon) {
+            m.userData.mat.emissiveIntensity = 0.5 + anonPulse * 1.0 + (m.userData.hov || 0) * 0.6;
+            extra *= 1 + anonPulse * 0.07 + (m.userData.clickT || 0) * 0.2;
+          }
+          if (m.userData.anonHint) {
+            var hintOp = finalOp * (0.3 + 0.7 * anonPulse);
+            m.userData.mat.opacity = hintOp;
+            m.visible = hintOp > 0.01;
+          }
+          // Settle the line as it materializes: ease scale up + drift down into place.
+          var sc = (0.9 + 0.1 * appear) * extra;
+          m.scale.setScalar(sc);
+          var mgx = m.userData.social ? m.userData.magX : 0;
+          var mgy = m.userData.social ? m.userData.magY : 0;
+          m.position.x = m.userData.baseX + mgx;
+          m.position.y = m.userData.baseY + (1 - appear) * 0.7 + mgy;
+          if (m.userData.hit) { m.userData.hit.position.x = m.userData.baseX + mgx; m.userData.hit.position.y = m.userData.baseY + mgy; }
+        }
+
+        updateAtmosphere(camZ, dt);
+        renderer.render(scene, camera);
+        lastCamZ = camZ;
+      };
+
+      resize3d = function () {
+        BASE_FOV = computeBaseFov();
+        camera.fov = BASE_FOV;
+        fovEase = BASE_FOV;
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setPixelRatio(maxDPR());
+        renderer.setSize(window.innerWidth, window.innerHeight, false);
+        lastCamZ = 1e9;
+      };
+    })();
+
+    // ============================================================
+    // SCROLL HINT + DEV COUNTER
+    // ============================================================
+    var hint = document.getElementById('scroll-hint');
+    var hintHidden = false;
+    function updateHint(scroll) {
+      if (!hintHidden && scroll > 60) { hint.classList.add('hidden'); hintHidden = true; }
+      else if (hintHidden && scroll <= 60) { hint.classList.remove('hidden'); hintHidden = false; }
+    }
+
+    // ============================================================
+    // CHAPTER NAV + SCROLL PROGRESS RAIL
+    // ============================================================
+    var navEl = document.getElementById('chapter-nav');
+    var navFill = document.getElementById('nav-fill');
+    var navItems = navEl ? Array.prototype.slice.call(navEl.querySelectorAll('.nav-item')) : [];
+    var NAV_T = navItems.map(function (b) { return parseFloat(b.getAttribute('data-t')) || 0; });
+    var navActive = -1;
+    navItems.forEach(function (b, i) {
+      b.addEventListener('click', function () {
+        var target = NAV_T[i] * TEXT_SPAN;
+        if (lenis && lenis.scrollTo) lenis.scrollTo(target, { duration: 1.7 });
+        else window.scrollTo(0, target);
+      });
+      b.addEventListener('mouseenter', function () { document.body.classList.add('link-hover'); Ambience.sfxHover(); });
+      b.addEventListener('mouseleave', function () { document.body.classList.remove('link-hover'); });
+    });
+    // Map raw intro progress onto evenly-spaced chapter dots so the moving fill
+    // always lines up with the markers.
+    function navProgressFromIntro(introT) {
+      if (NAV_T.length < 2) return introT;
+      var seg = NAV_T.length - 2;
+      for (var i = 0; i < NAV_T.length - 1; i++) { if (introT < NAV_T[i + 1]) { seg = i; break; } }
+      var span = NAV_T[seg + 1] - NAV_T[seg]; if (span <= 0) span = 1;
+      var local = (introT - NAV_T[seg]) / span; if (local < 0) local = 0; if (local > 1) local = 1;
+      return (seg + local) / (NAV_T.length - 1);
+    }
+    var lastNavP = -1;
+    function updateNav(introT) {
+      if (!navEl || !navItems.length) return;
+      var np = navProgressFromIntro(introT);
+      if (Math.abs(np - lastNavP) > 0.002) {
+        if (navFill) navFill.style.height = (np * 100) + '%';
+        lastNavP = np;
+      }
+      var idx = Math.round(np * (navItems.length - 1));
+      if (idx < 0) idx = 0; if (idx >= navItems.length) idx = navItems.length - 1;
+      if (idx !== navActive) {
+        for (var j = 0; j < navItems.length; j++) navItems[j].classList.toggle('active', j === idx);
+        navActive = idx;
+      }
+    }
+    // ============================================================
+    // UNIFIED rAF LOOP (frame-rate independent smoothing)
+    // ============================================================
+    var lastScrollSeen = Number.NaN;
+    var settled = false;
+    var prevTime = 0;
+    function loop(time) {
+      requestAnimationFrame(loop);
+      lenis.raf(time);
+
+      var dt = prevTime ? (time - prevTime) : 16.67;
+      prevTime = time;
+      if (dt <= 0 || dt > 100) dt = 16.67;
+      var k = 1 - Math.pow(1 - SMOOTH, dt / 16.667);
+
+      var scroll = getScroll();
+      var cycleProgress = ((scroll / CYCLE_PX) % 1 + 1) % 1;
+      var delta = cycleProgress - smoothed;
+      if (delta > 0.5) delta -= 1; else if (delta < -0.5) delta += 1;
+      if (Math.abs(delta) < 0.0002) { smoothed = cycleProgress; settled = true; }
+      else { smoothed = ((smoothed + delta * k) % 1 + 1) % 1; settled = false; }
+
+      // 3D text rides an absolute, non-looping progress so it flies in once and
+      // rests on the interactive contact menu (the forest keeps looping behind).
+      var textTarget = scroll / TEXT_SPAN;
+      if (textTarget < 0) textTarget = 0; if (textTarget > 1) textTarget = 1;
+      textSmoothed += (textTarget - textSmoothed) * k;
+      if (Math.abs(textTarget - textSmoothed) < 0.00015) textSmoothed = textTarget;
+
+      drawDisplay();
+      update3d(textSmoothed, dt, scroll);
+      updateNav(textSmoothed);
+      if (scroll !== lastScrollSeen || !settled) {
+        updateHint(scroll);
+        lastScrollSeen = scroll;
+      }
+    }
+
+    // Resize handling tuned to NOT fight scrolling. On phones the URL bar slides
+    // in/out as you scroll, firing a storm of resize/visualViewport events.
+    // Reallocating the canvas + WebGL buffers on each one is what made scrolling
+    // stutter, so we (a) ignore pure URL-bar height jitter and (b) trailing-
+    // debounce the real work so buffers only reallocate once the viewport settles.
+    var _rT = 0, _lastW = window.innerWidth, _lastH = window.innerHeight;
+    function doResize() {
+      _lastW = window.innerWidth; _lastH = window.innerHeight;
+      sizeVideoCanvas();
+      resize3d();
+    }
+    function onResize() {
+      var w = window.innerWidth, h = window.innerHeight;
+      // Width unchanged + small height delta == mobile URL bar; skip entirely.
+      if (isMobile && w === _lastW && Math.abs(h - _lastH) < 140) return;
+      clearTimeout(_rT);
+      _rT = setTimeout(doResize, isMobile ? 220 : 120);
+    }
+    window.addEventListener('resize', onResize, { passive: true });
+    window.addEventListener('orientationchange', function () { setTimeout(doResize, 300); });
+    if (window.visualViewport && window.visualViewport.addEventListener) {
+      window.visualViewport.addEventListener('resize', onResize, { passive: true });
+    }
+    sizeVideoCanvas();
+    requestAnimationFrame(loop);
+  })();
+  </script>
+</body>
+</html>

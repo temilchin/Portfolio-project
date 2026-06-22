@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Anonymous — whisper a secret</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#060905">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300&family=Inter:wght@300;400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./anon.css">
+<script src="./config.js"></script>
+<style>
+  /* ---- Wall preview (self-contained; matches the forest vibe) ---- */
+  .wallprev{margin-top:54px;border-top:1px solid var(--line);padding-top:34px}
+  .wallprev-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:20px}
+  .wallprev-head .eyebrow{margin-bottom:8px}
+  .wallprev-head h2{font-family:"Cormorant Garamond",Georgia,serif;font-weight:300;
+    font-size:clamp(24px,4.6vw,34px);margin:.05em 0 .3em;letter-spacing:.5px;line-height:1.08}
+  .wallprev-head .sub{margin:0;color:var(--muted);font-size:14px;max-width:42ch}
+  .wallprev-viewall{white-space:nowrap;font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--muted);padding-top:8px;transition:color .2s}
+  .wallprev-viewall:hover{color:var(--accent);text-decoration:none}
+  .wp-grid{display:grid;gap:14px;position:relative}
+  .wp-card{position:relative;background:linear-gradient(160deg,rgba(18,28,18,.62),rgba(10,16,10,.5));
+    border:1px solid var(--line);border-radius:16px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    padding:18px 20px 18px 24px;cursor:pointer;overflow:hidden;opacity:0;transform:translateY(18px);
+    animation:wpRise .7s cubic-bezier(.2,.7,.2,1) forwards;
+    transition:transform .3s cubic-bezier(.2,.7,.2,1),border-color .3s,box-shadow .3s}
+  .wp-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+    background:linear-gradient(180deg,var(--accent),transparent);opacity:.55}
+  .wp-card:nth-child(1){animation-delay:.08s}
+  .wp-card:nth-child(2){animation-delay:.20s}
+  .wp-card:nth-child(3){animation-delay:.32s}
+  .wp-card:hover{transform:translateY(-4px);border-color:var(--accent);box-shadow:0 22px 46px -28px rgba(0,0,0,.85)}
+  .wp-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .wp-quote{font-family:"Cormorant Garamond",Georgia,serif;font-size:42px;line-height:0;
+    color:var(--accent);opacity:.4;transform:translateY(8px)}
+  .wp-msg{margin:12px 0 0;font-size:15.5px;line-height:1.62;color:var(--ink);
+    display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .wp-hint{color:var(--muted);font-size:12px;font-style:italic;margin-top:10px;letter-spacing:.02em}
+  .wp-skel{height:104px;border-radius:16px;border:1px solid var(--line);
+    background:linear-gradient(100deg,rgba(143,184,130,.04),rgba(143,184,130,.13),rgba(143,184,130,.04));
+    background-size:200% 100%;animation:wpShimmer 1.5s linear infinite}
+  .wp-cta{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;margin-top:22px;
+    padding:18px 26px;font-size:15px;letter-spacing:.06em;border-radius:999px;border:1px solid var(--accent);
+    background:rgba(143,184,130,.16);color:#eafff0;cursor:pointer;position:relative;overflow:hidden;
+    transition:background .2s,box-shadow .3s,transform .2s;animation:wpBreathe 3.8s ease-in-out infinite}
+  .wp-cta:hover{background:rgba(143,184,130,.26);text-decoration:none;transform:translateY(-1px)}
+  .wp-cta .arr{transition:transform .25s}
+  .wp-cta:hover .arr{transform:translateX(6px)}
+  .wp-cta::after{content:"";position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(120deg,transparent 20%,rgba(234,255,240,.30),transparent 80%);transform:translateX(-130%)}
+  .wp-cta:hover::after{animation:wpSheen .9s ease}
+  @keyframes wpRise{to{opacity:1;transform:none}}
+  @keyframes wpShimmer{to{background-position:-200% 0}}
+  @keyframes wpSheen{to{transform:translateX(130%)}}
+  @keyframes wpBreathe{0%,100%{box-shadow:0 0 0 0 rgba(143,184,130,0)}50%{box-shadow:0 0 30px 1px rgba(143,184,130,.22)}}
+  @media (max-width:540px){.wallprev-head{flex-direction:column;gap:4px}.wallprev-viewall{padding-top:0}}
+  @media (prefers-reduced-motion:reduce){.wp-card{animation:none;opacity:1;transform:none}.wp-skel,.wp-cta{animation:none}}
+
+  /* ---- Returning-visitor reveal bar (expandable, self-contained) ---- */
+  .returnbar{margin:24px 0 2px;border:1px solid var(--line);border-radius:16px;
+    background:linear-gradient(160deg,rgba(18,28,18,.55),rgba(10,16,10,.45));
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);overflow:hidden;
+    opacity:0;transform:translateY(14px);animation:wpRise .8s cubic-bezier(.2,.7,.2,1) .1s forwards;
+    transition:border-color .3s,box-shadow .3s}
+  .returnbar:hover{border-color:var(--accent);box-shadow:0 18px 42px -30px rgba(0,0,0,.85)}
+  .returnbar-face{display:flex;align-items:center;gap:14px;padding:15px 18px;cursor:pointer;user-select:none}
+  .rb-ico{display:grid;place-items:center;width:40px;height:40px;flex:0 0 auto;border-radius:50%;
+    border:1px solid var(--line);background:rgba(143,184,130,.1);font-size:18px;
+    animation:rbPulse 3.2s ease-in-out infinite}
+  .rb-text{flex:1;font-size:15px;color:var(--muted);line-height:1.4}
+  .rb-text b{color:var(--ink);font-weight:400}
+  .rb-arr{color:var(--accent);font-size:18px;transition:transform .35s cubic-bezier(.2,.7,.2,1)}
+  .returnbar.open .rb-arr{transform:rotate(90deg)}
+  .returnbar-panel{max-height:0;opacity:0;overflow:hidden;display:flex;gap:10px;flex-wrap:wrap;padding:0 18px;
+    transition:max-height .45s cubic-bezier(.2,.7,.2,1),opacity .35s ease,padding .45s ease}
+  .returnbar.open .returnbar-panel{max-height:160px;opacity:1;padding:2px 18px 18px}
+  .rb-input{flex:1;min-width:160px;text-transform:uppercase;letter-spacing:.18em}
+  .rb-input::placeholder{letter-spacing:.18em;color:rgba(159,179,154,.5)}
+  @keyframes rbPulse{0%,100%{box-shadow:0 0 0 0 rgba(143,184,130,0)}50%{box-shadow:0 0 0 7px rgba(143,184,130,.10)}}
+  @media (prefers-reduced-motion:reduce){.returnbar{animation:none;opacity:1;transform:none}.rb-ico{animation:none}}
+
+  /* ---- Insurance: keep interactive controls above any scene layer ---- */
+  .card{position:relative;z-index:3}
+  .cats{position:relative;z-index:3}
+  .cat{position:relative;z-index:3;pointer-events:auto}
+</style>
+</head>
+<body data-scene="submit">
+<main class="wrap">
+  <a class="back" href="./index.html">← back to the forest</a>
+  <p class="eyebrow" style="margin-top:26px">Anonymous</p>
+  <h1>Whisper a secret.</h1>
+  <p class="lead">Say anything — a wish, a memory, something funny, even something harsh. Leave a hint about yourself and I’ll try to guess who you are. Nothing appears anywhere until I’ve personally read and approved it.</p>
+
+  <div class="returnbar" id="returnbar">
+    <div class="returnbar-face" id="rbFace" role="button" tabindex="0" aria-expanded="false">
+      <span class="rb-ico">🗝️</span>
+      <span class="rb-text">Already whispered? <b>Reveal your code</b> — see if it’s live and whether I guessed you.</span>
+      <span class="rb-arr">→</span>
+    </div>
+    <div class="returnbar-panel" id="rbPanel">
+      <input type="text" id="rbCode" class="rb-input" placeholder="ANON-XXXXX" autocomplete="off" spellcheck="false" maxlength="16">
+      <button class="btn" id="rbGo">Reveal →</button>
+    </div>
+  </div>
+
+  <section id="form" class="card" style="margin-top:30px">
+    <label>Category</label>
+    <div class="cats" id="cats">
+      <div class="cat" data-k="love">❤️ Love</div>
+      <div class="cat" data-k="regret">🥀 Regret</div>
+      <div class="cat" data-k="funny">😂 Funny</div>
+      <div class="cat" data-k="hate">🔥 Hate</div>
+      <div class="cat" data-k="other">🌫️ Other</div>
+    </div>
+
+    <label style="margin-top:22px">Your message <span class="count" id="mcount">0 / 500</span></label>
+    <textarea id="message" rows="5" maxlength="500" placeholder="The thing you never said…"></textarea>
+
+    <label>A hint about you <span class="count" id="hcount">0 / 200</span></label>
+    <input type="text" id="hint" maxlength="200" placeholder="e.g. we met one rainy October…">
+    <p class="hintline">Required — it’s the clue I’ll use to guess you.</p>
+
+    <div id="cf" style="margin-top:20px"></div>
+
+    <div class="row">
+      <button class="btn" id="send">Send anonymously</button>
+    </div>
+    <div class="err" id="err"></div>
+  </section>
+
+  <section id="done" class="card" style="margin-top:30px;display:none">
+    <p class="eyebrow">Saved — pending my review</p>
+    <h1 class="serif" style="font-size:clamp(26px,5vw,40px)">Your reveal code</h1>
+    <p class="code" id="code">ANON-XXXXX</p>
+    <div class="row">
+      <button class="btn" id="copy">Copy code</button>
+      <a class="btn ghost" href="./reveal.html">Check it later →</a>
+    </div>
+    <p class="note" style="margin-top:18px">Save this code. Come back to <a href="./reveal.html">the reveal page</a> to see if it’s live and whether I guessed you. It’s shown only once.</p>
+  </section>
+
+  <section class="wallprev">
+    <div class="wallprev-head">
+      <div>
+        <p class="eyebrow">From the wall</p>
+        <h2>What others have whispered</h2>
+        <p class="sub" id="wpnote">A few recent messages, each read and approved by hand.</p>
+      </div>
+      <a class="wallprev-viewall" href="./wall.html">view all →</a>
+    </div>
+    <div class="wp-grid" id="wpgrid">
+      <div class="wp-skel"></div><div class="wp-skel"></div><div class="wp-skel"></div>
+    </div>
+    <a class="wp-cta" href="./wall.html">Explore the whole wall <span class="arr">→</span></a>
+  </section>
+
+  <p class="foothint">Truly anonymous — no name, no email, no login. A one-way hashed signal is kept only to stop spam, and is never shown.</p>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------------- submission logic (Supabase-wired) ---------------- */
+(function(){
+  var CFG = window.ANON_CONFIG || {};
+  var MAX = CFG.MESSAGE_MAX || 500, HMAX = CFG.HINT_MAX || 200;
+  var cats = [
+    {k:"love",e:"❤️",t:"Love"},{k:"regret",e:"🥀",t:"Regret"},
+    {k:"funny",e:"😂",t:"Funny"},{k:"hate",e:"🔥",t:"Hate"},{k:"other",e:"🌫️",t:"Other"}
+  ];
+  var sel=null, tsToken=null, tsWidget=null;
+  var catsEl=document.getElementById("cats");
+  // Buttons are in the HTML so they always show; build them only if missing.
+  if(catsEl && !catsEl.children.length){
+    cats.forEach(function(c){
+      var b=document.createElement("div");
+      b.className="cat"; b.setAttribute("data-k",c.k); b.textContent=c.e+" "+c.t;
+      catsEl.appendChild(b);
+    });
+  }
+  // Event delegation: one listener handles any chip, no matter how it was built.
+  if(catsEl){
+    catsEl.addEventListener("click",function(e){
+      var b=(e.target&&e.target.closest)?e.target.closest(".cat"):null;
+      if(!b) return;
+      sel=b.getAttribute("data-k");
+      Array.prototype.forEach.call(catsEl.children,function(x){ x.classList.toggle("sel", x===b); });
+    });
+  }
+  var msg=document.getElementById("message"), hint=document.getElementById("hint");
+  var mc=document.getElementById("mcount"), hc=document.getElementById("hcount");
+  if(msg) msg.maxLength=MAX;
+  if(hint) hint.maxLength=HMAX;
+  function updMsg(){ if(mc&&msg) mc.textContent=msg.value.length+" / "+MAX; }
+  function updHint(){ if(hc&&hint) hc.textContent=hint.value.length+" / "+HMAX; }
+  if(msg) msg.addEventListener("input",updMsg);
+  if(hint) hint.addEventListener("input",updHint);
+  updMsg(); updHint();
+
+  window.onTurnstileLoad=function(){
+    if(!CFG.TURNSTILE_SITE_KEY || CFG.TURNSTILE_SITE_KEY.indexOf("YOUR-")===0){
+      return; // No Turnstile configured -> bot check disabled. Add it later by setting TURNSTILE_SITE_KEY in config.js.
+    }
+    tsWidget=window.turnstile.render("#cf",{sitekey:CFG.TURNSTILE_SITE_KEY,theme:"dark",
+      callback:function(t){tsToken=t;},"expired-callback":function(){tsToken=null;}});
+  };
+
+  var err=document.getElementById("err"), send=document.getElementById("send");
+  function fail(m){err.textContent=m;}
+  send.onclick=async function(){
+    err.textContent="";
+    if(!sel) return fail("Pick a category.");
+    if(!msg.value.trim()) return fail("Write a message.");
+    if(!hint.value.trim()) return fail("A hint is required.");
+    var needsCaptcha = CFG.TURNSTILE_SITE_KEY && CFG.TURNSTILE_SITE_KEY.indexOf("YOUR-")!==0;
+    if(needsCaptcha && !tsToken) return fail("Please complete the bot check.");
+    if(!CFG.SUBMIT_FN_URL || CFG.SUBMIT_FN_URL.indexOf("YOUR-")>-1) return fail("Backend not configured yet (set SUBMIT_FN_URL in config.js).");
+    send.disabled=true; send.textContent="Sending…";
+    try{
+      var headers={"content-type":"application/json"};
+      if(CFG.SUPABASE_ANON_KEY){ headers["authorization"]="Bearer "+CFG.SUPABASE_ANON_KEY; headers["apikey"]=CFG.SUPABASE_ANON_KEY; }
+      var r=await fetch(CFG.SUBMIT_FN_URL,{method:"POST",headers:headers,
+        body:JSON.stringify({category:sel,message:msg.value.trim(),hint:hint.value.trim(),token:tsToken})});
+      var d=await r.json().catch(function(){return {};});
+      if(!r.ok || !d.ok) throw new Error(mapErr(d.error));
+      document.getElementById("form").style.display="none";
+      var done=document.getElementById("done"); done.style.display="block"; done.classList.add("reveal-pop");
+      document.getElementById("code").textContent=d.reveal_code;
+      window.scrollTo({top:0,behavior:"smooth"});
+    }catch(e){
+      fail(e.message||"Something went wrong.");
+      if(tsWidget!=null && window.turnstile){window.turnstile.reset(tsWidget);} tsToken=null;
+    }finally{ send.disabled=false; send.textContent="Send anonymously"; }
+  };
+  function mapErr(c){return ({
+    rate_limited:"You’ve sent a few already — try again in an hour.",
+    captcha_failed:"Bot check failed — please retry.",
+    captcha_required:"Please complete the bot check.",
+    bad_message:"Message must be 1–"+MAX+" characters.",
+    bad_hint:"Hint must be 1–"+HMAX+" characters.",
+    bad_category:"Pick a valid category."
+  })[c] || "Couldn’t send — please try again.";}
+
+  document.getElementById("copy").onclick=function(){
+    var t=document.getElementById("code").textContent;
+    if(navigator.clipboard) navigator.clipboard.writeText(t);
+    toast("Code copied");
+  };
+  function toast(m){var t=document.getElementById("toast");t.textContent=m;t.classList.add("show");setTimeout(function(){t.classList.remove("show");},1800);}
+})();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* ---------------- wall preview (3 recent whispers -> full wall) ---------------- */
+(function(){
+  var CFG=window.ANON_CONFIG||{};
+  var grid=document.getElementById("wpgrid"), note=document.getElementById("wpnote");
+  if(!grid) return;
+  var CAT={love:["❤️","Love"],regret:["🥀","Regret"],funny:["😂","Funny"],hate:["🔥","Hate"],other:["🌫️","Other"]};
+  function esc(s){var d=document.createElement("div");d.textContent=s==null?"":String(s);return d.innerHTML;}
+  function go(){location.href="./wall.html";}
+  function card(r){
+    var c=CAT[r.category]||["🌫️","Other"];
+    var d=document.createElement("div"); d.className="wp-card";
+    d.innerHTML='<div class="wp-top"><span class="pill">'+c[0]+' '+c[1]+'</span><span class="wp-quote">”</span></div>'
+      +'<p class="wp-msg">'+esc(r.message)+'</p>'
+      +'<div class="wp-hint">hint: '+esc(r.hint)+'</div>';
+    d.onclick=go; return d;
+  }
+  function paint(rows){ grid.innerHTML=""; rows.slice(0,3).forEach(function(r){grid.appendChild(card(r));}); }
+  var samples=[
+    {category:"love",message:"I still slow down near the cafe where we used to meet, just in case.",hint:"you always ordered the same thing"},
+    {category:"regret",message:"I should have said yes when you asked me to stay that night.",hint:"a station platform, late winter"},
+    {category:"funny",message:"I laughed so hard at your terrible joke that I snorted in a silent room.",hint:"we were the loud table in the back"}
+  ];
+  function sampleMode(){ if(note) note.textContent="A glimpse — real whispers appear here once the wall is live."; paint(samples); }
+  if(!CFG.SUPABASE_URL || CFG.SUPABASE_URL.indexOf("YOUR-")>-1 || !window.supabase){ sampleMode(); return; }
+  try{
+    var sb=window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY);
+    sb.from("wall").select("*").order("created_at",{ascending:false}).limit(3).then(function(res){
+      if(res.error){ sampleMode(); return; }
+      if(!res.data || !res.data.length){
+        grid.innerHTML='<div class="wp-card" style="cursor:default"><p class="wp-msg" style="-webkit-line-clamp:initial">No whispers on the wall yet — yours could be the very first.</p></div>';
+        return;
+      }
+      paint(res.data);
+    });
+  }catch(e){ sampleMode(); }
+})();
+</script>
+<script>
+/* ---------------- returning-visitor reveal bar ---------------- */
+(function(){
+  var bar=document.getElementById("returnbar"), face=document.getElementById("rbFace");
+  var code=document.getElementById("rbCode"), go=document.getElementById("rbGo");
+  if(!bar||!face) return;
+  function toggle(){
+    var open=bar.classList.toggle("open");
+    face.setAttribute("aria-expanded", open?"true":"false");
+    if(open) setTimeout(function(){ code.focus(); }, 260);
+  }
+  face.onclick=toggle;
+  face.addEventListener("keydown",function(e){ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); toggle(); } });
+  function reveal(){
+    var v=(code.value||"").trim().toUpperCase();
+    location.href="./reveal.html"+(v?("?code="+encodeURIComponent(v)):"");
+  }
+  go.onclick=reveal;
+  code.addEventListener("keydown",function(e){ if(e.key==="Enter") reveal(); });
+  code.addEventListener("click",function(e){ e.stopPropagation(); });
+})();
+</script>
+<script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
+<script src="./anon-scene.js"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad" async defer></script>
+</body>
+</html>

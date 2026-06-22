@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Anonymous — admin</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#060905">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300&family=Inter:wght@300;400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./anon.css">
+<script src="./config.js"></script>
+</head>
+<body data-scene="admin">
+<main class="wrap">
+  <a class="back" href="./index.html">← forest</a>
+  <p class="eyebrow" style="margin-top:26px">Anonymous</p>
+  <h1>Moderation.</h1>
+
+  <section id="login" class="card" style="margin-top:24px;display:none">
+    <label>Email</label>
+    <input type="email" id="email" autocomplete="username">
+    <label>Password</label>
+    <input type="password" id="password" autocomplete="current-password">
+    <div class="row"><button class="btn" id="signin">Sign in</button></div>
+    <div class="err" id="lerr"></div>
+  </section>
+
+  <section id="app" style="display:none">
+    <div class="stat" id="stat"></div>
+    <div class="row" style="margin-top:0">
+      <button class="btn ghost sm" id="refresh">Refresh</button>
+      <button class="btn ghost sm" id="signout">Sign out</button>
+    </div>
+    <div class="tabs" id="tabs"></div>
+    <div id="list"><p class="empty">Loading…</p></div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+  var CFG=window.ANON_CONFIG||{};
+  var CAT={love:["❤️","Love"],regret:["🥀","Regret"],funny:["😂","Funny"],hate:["🔥","Hate"],other:["🌫️","Other"]};
+  var loginEl=document.getElementById("login"), appEl=document.getElementById("app");
+  var listEl=document.getElementById("list"), tabsEl=document.getElementById("tabs"), statEl=document.getElementById("stat");
+  var rows=[], filter="pending";
+  function esc(s){var d=document.createElement("div");d.textContent=s==null?"":String(s);return d.innerHTML;}
+  function toast(m){var t=document.getElementById("toast");t.textContent=m;t.classList.add("show");setTimeout(function(){t.classList.remove("show");},1800);}
+  function nowISO(){return new Date().toISOString();}
+
+  if(!CFG.SUPABASE_URL || CFG.SUPABASE_URL.indexOf("YOUR-")>-1){
+    loginEl.style.display="block";
+    document.getElementById("lerr").textContent="Backend not configured (set SUPABASE_URL / SUPABASE_ANON_KEY in config.js)."; return;
+  }
+  var sb=window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY);
+
+  async function boot(){
+    var s=await sb.auth.getSession();
+    if(s.data.session){ loginEl.style.display="none"; appEl.style.display="block"; load(); }
+    else { loginEl.style.display="block"; appEl.style.display="none"; }
+  }
+  document.getElementById("signin").onclick=async function(){
+    var lerr=document.getElementById("lerr"); lerr.textContent="";
+    var email=document.getElementById("email").value.trim();
+    var password=document.getElementById("password").value;
+    var res=await sb.auth.signInWithPassword({email:email,password:password});
+    if(res.error){ lerr.textContent=res.error.message; return; }
+    boot();
+  };
+  document.getElementById("signout").onclick=async function(){ await sb.auth.signOut(); boot(); };
+  document.getElementById("refresh").onclick=function(){ load(); };
+
+  function tabs(){
+    var defs=[["pending","Pending"],["approved","Approved"],["rejected","Rejected"],["all","All"]];
+    tabsEl.innerHTML="";
+    defs.forEach(function(d){
+      var el=document.createElement("div");
+      el.className="tab"+(filter===d[0]?" sel":""); el.textContent=d[1];
+      el.onclick=function(){filter=d[0];tabs();render();};
+      tabsEl.appendChild(el);
+    });
+  }
+  async function load(){
+    listEl.innerHTML='<p class="empty">Loading…</p>';
+    var res=await sb.from("submissions").select("*").order("created_at",{ascending:false});
+    if(res.error){ listEl.innerHTML='<p class="empty">'+esc(res.error.message)+'</p>'; return; }
+    rows=res.data||[]; tabs(); stats(); render();
+  }
+  function stats(){
+    var p=rows.filter(function(r){return r.status==="pending";}).length;
+    var a=rows.filter(function(r){return r.status==="approved";}).length;
+    statEl.innerHTML='<span><b>'+p+'</b> pending</span><span><b>'+a+'</b> approved</span><span><b>'+rows.length+'</b> total</span>';
+  }
+  function render(){
+    var items=rows.filter(function(r){return filter==="all"||r.status===filter;});
+    if(!items.length){ listEl.innerHTML='<p class="empty">Nothing here.</p>'; return; }
+    listEl.innerHTML="";
+    items.forEach(function(r){
+      var c=CAT[r.category]||["🌫️","Other"];
+      var card=document.createElement("div"); card.className="card item";
+      card.innerHTML=
+        '<span class="pill">'+c[0]+' '+c[1]+'</span> '
+        +'<span class="pill">'+esc(r.status)+'</span> '
+        +'<span class="note" style="float:right">'+esc(r.reveal_code)+'</span>'
+        +'<p class="msg" style="margin-top:12px">'+esc(r.message)+'</p>'
+        +'<div class="hintline">hint: '+esc(r.hint)+'</div>'
+        +'<label>My guess</label>'
+        +'<input type="text" class="guess" value="'+esc(r.guess||"")+'" placeholder="Who do you think this is?">'
+        +'<div class="row">'
+        +(r.status!=="approved"?'<button class="btn sm act-approve">Approve</button>':'')
+        +(r.status!=="rejected"?'<button class="btn ghost sm act-reject">Reject</button>':'')
+        +'<button class="btn ghost sm act-guess">Save guess</button>'
+        +'<button class="btn danger sm act-delete">Delete</button>'
+        +'</div><div class="err act-err"></div>';
+      var gerr=card.querySelector(".act-err");
+      var guessInput=card.querySelector(".guess");
+      function update(patch,msg){ return sb.from("submissions").update(patch).eq("id",r.id).then(function(res){ if(res.error){gerr.textContent=res.error.message;}else{toast(msg);load();} }); }
+      var ap=card.querySelector(".act-approve"); if(ap) ap.onclick=function(){update({status:"approved",approved_at:nowISO()},"Approved");};
+      var rj=card.querySelector(".act-reject"); if(rj) rj.onclick=function(){update({status:"rejected"},"Rejected");};
+      card.querySelector(".act-guess").onclick=function(){update({guess:guessInput.value.trim()||null,guessed_at:guessInput.value.trim()?nowISO():null},"Guess saved");};
+      card.querySelector(".act-delete").onclick=function(){ if(!window.confirm("Delete permanently?")) return; sb.from("submissions").delete().eq("id",r.id).then(function(res){ if(res.error){gerr.textContent=res.error.message;}else{toast("Deleted");load();} }); };
+      listEl.appendChild(card);
+    });
+  }
+  boot();
+})();
+</script>
+<script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
+<script src="./anon-scene.js"></script>
+</body>
+</html>

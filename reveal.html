@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Anonymous — reveal</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#060905">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300&family=Inter:wght@300;400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./anon.css">
+<script src="./config.js"></script>
+</head>
+<body data-scene="reveal">
+<main class="wrap">
+  <a class="back" href="./index.html">← back to the forest</a>
+  <p class="eyebrow" style="margin-top:26px">Anonymous</p>
+  <h1>Did I guess you?</h1>
+  <p class="lead">Enter the reveal code you saved when you left your message.</p>
+
+  <section class="card" style="margin-top:28px">
+    <label>Reveal code</label>
+    <input type="text" id="code" placeholder="ANON-XXXXX" autocomplete="off" spellcheck="false" style="letter-spacing:.18em;text-transform:uppercase">
+    <div class="row"><button class="btn" id="check">Check</button></div>
+    <div class="err" id="err"></div>
+  </section>
+
+  <section id="result" class="card" style="margin-top:24px;display:none"></section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+  var CFG=window.ANON_CONFIG||{};
+  var CAT={love:["❤️","Love"],regret:["🥀","Regret"],funny:["😂","Funny"],hate:["🔥","Hate"],other:["🌫️","Other"]};
+  var codeEl=document.getElementById("code"), err=document.getElementById("err");
+  var btn=document.getElementById("check"), result=document.getElementById("result");
+  function esc(s){var d=document.createElement("div");d.textContent=s==null?"":String(s);return d.innerHTML;}
+  function toast(m){var t=document.getElementById("toast");t.textContent=m;t.classList.add("show");setTimeout(function(){t.classList.remove("show");},1800);}
+
+  var sb=null;
+  if(CFG.SUPABASE_URL && CFG.SUPABASE_URL.indexOf("YOUR-")===-1){ sb=window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY); }
+
+  // Prefill from ?code=
+  var q=new URLSearchParams(location.search).get("code"); if(q) codeEl.value=q;
+
+  btn.onclick=check;
+  codeEl.addEventListener("keydown",function(e){if(e.key==="Enter")check();});
+
+  async function check(){
+    err.textContent=""; result.style.display="none";
+    var code=(codeEl.value||"").trim().toUpperCase();
+    if(!code) return err.textContent="Enter your code.";
+    if(!sb) return err.textContent="Backend not configured yet (set SUPABASE_URL in config.js).";
+    btn.disabled=true; btn.textContent="Checking…";
+    try{
+      var res=await sb.rpc("reveal_status",{p_code:code});
+      if(res.error) throw new Error(res.error.message);
+      var row=(res.data&&res.data[0])||null;
+      if(!row){ err.textContent="No message found for that code."; return; }
+      show(code,row);
+    }catch(e){ err.textContent="Couldn’t check: "+(e.message||"error"); }
+    finally{ btn.disabled=false; btn.textContent="Check"; }
+  }
+
+  function show(code,r){
+    var c=CAT[r.category]||["🌫️","Other"];
+    var statusLine;
+    if(r.status==="approved") statusLine='<span class="ok">✓ Live on the wall</span>';
+    else if(r.status==="rejected") statusLine='<span style="color:var(--danger)">This one wasn’t published</span>';
+    else statusLine='<span class="note">Still pending my review…</span>';
+
+    var html='<p class="eyebrow">'+c[0]+' '+c[1]+'</p><h1 class="serif" style="font-size:clamp(24px,5vw,38px)">'+statusLine+'</h1>';
+
+    if(r.guessed){
+      html+='<div class="guessline" style="font-size:16px"><b>My guess:</b> '+esc(r.guess)+'</div>';
+      if(r.writer_confirmed===null || typeof r.writer_confirmed==="undefined"){
+        html+='<p class="note" style="margin-top:16px">Did I get it right?</p>'
+          +'<div class="row"><button class="btn" id="yes">✓ You got me</button>'
+          +'<button class="btn ghost" id="no">✗ Nope</button></div>'
+          +'<div class="err" id="cerr"></div>';
+      } else {
+        html+='<p class="'+(r.writer_confirmed?"ok":"")+'" style="margin-top:14px;'+(r.writer_confirmed?"":"color:var(--danger)")+'">'
+          +(r.writer_confirmed?"You confirmed — I got it right. 🌿":"You said I got it wrong.")+'</p>';
+      }
+    } else {
+      html+='<p class="note" style="margin-top:14px">I haven’t guessed yet. Check back soon.</p>';
+    }
+    result.innerHTML=html; result.style.display="block";
+
+    var yes=document.getElementById("yes"), no=document.getElementById("no");
+    if(yes) yes.onclick=function(){confirm(code,true);};
+    if(no) no.onclick=function(){confirm(code,false);};
+  }
+
+  async function confirm(code,correct){
+    var cerr=document.getElementById("cerr"); if(cerr) cerr.textContent="";
+    try{
+      var res=await sb.rpc("confirm_guess",{p_code:code,p_correct:correct});
+      if(res.error) throw new Error(res.error.message);
+      var row=(res.data&&res.data[0])||null;
+      if(!row||!row.ok){ if(cerr) cerr.textContent="Already answered, or no guess to confirm."; return; }
+      toast("Thanks — recorded.");
+      check();
+    }catch(e){ if(cerr) cerr.textContent="Couldn’t record: "+(e.message||"error"); }
+  }
+})();
+</script>
+<script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
+<script src="./anon-scene.js"></script>
+</body>
+</html>

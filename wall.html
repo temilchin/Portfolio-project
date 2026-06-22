@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Anonymous — the wall</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#060905">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300&family=Inter:wght@300;400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./anon.css">
+<script src="./config.js"></script>
+</head>
+<body data-scene="wall">
+<main class="wrap">
+  <a class="back" href="./index.html">← back to the forest</a>
+  <p class="eyebrow" style="margin-top:26px">Anonymous</p>
+  <h1>The wall.</h1>
+  <p class="lead">Everything here was left anonymously and approved by hand. A content note: the Hate category can be blunt.</p>
+
+  <div class="stat" id="stat"></div>
+  <div class="tabs" id="tabs"></div>
+
+  <div id="list"><p class="empty">Loading…</p></div>
+
+  <div class="row">
+    <a class="btn" href="./anonymous.html">Add your own →</a>
+    <a class="btn ghost" href="./reveal.html">Have a code?</a>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+  var CFG=window.ANON_CONFIG||{};
+  var CAT={love:["❤️","Love"],regret:["🥀","Regret"],funny:["😂","Funny"],hate:["🔥","Hate"],other:["🌫️","Other"]};
+  var list=document.getElementById("list"), tabsEl=document.getElementById("tabs"), statEl=document.getElementById("stat");
+  var rows=[], filter="all";
+  function esc(s){var d=document.createElement("div");d.textContent=s==null?"":String(s);return d.innerHTML;}
+  function fmt(ts){ if(!ts) return ""; try{return new Date(ts).toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"});}catch(e){return "";} }
+
+  if(!CFG.SUPABASE_URL || CFG.SUPABASE_URL.indexOf("YOUR-")>-1){
+    list.innerHTML='<p class="empty">Backend not configured yet — set SUPABASE_URL / SUPABASE_ANON_KEY in config.js.</p>'; return;
+  }
+  var sb=window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY);
+
+  function tabs(){
+    var defs=[["all","All"],["love","❤️"],["regret","🥀"],["funny","😂"],["hate","🔥"],["other","🌫️"]];
+    tabsEl.innerHTML="";
+    defs.forEach(function(d){
+      var el=document.createElement("div");
+      el.className="tab"+(filter===d[0]?" sel":""); el.textContent=d[1];
+      el.onclick=function(){filter=d[0];tabs();render();};
+      tabsEl.appendChild(el);
+    });
+  }
+  function render(){
+    var items=rows.filter(function(r){return filter==="all"||r.category===filter;});
+    if(!items.length){ list.innerHTML='<p class="empty">Nothing here yet. Be the first to whisper.</p>'; return; }
+    list.innerHTML=items.map(function(r){
+      var c=CAT[r.category]||["🌫️","Other"];
+      var g="";
+      if(r.guess){
+        var verdict="";
+        if(r.writer_confirmed===true) verdict=' <span class="ok">— they confirmed I got it right</span>';
+        else if(r.writer_confirmed===false) verdict=' <span style="color:var(--danger)">— nope, wrong guess</span>';
+        g='<div class="guessline"><b>My guess:</b> '+esc(r.guess)+verdict+'</div>';
+      } else {
+        g='<div class="guessline note">Not guessed yet…</div>';
+      }
+      return '<div class="card item"><span class="pill">'+c[0]+' '+c[1]+'</span>'
+        +' <span class="note" style="float:right">'+fmt(r.approved_at||r.created_at)+'</span>'
+        +'<p class="msg" style="margin-top:12px">'+esc(r.message)+'</p>'
+        +'<div class="hintline">hint: '+esc(r.hint)+'</div>'+g+'</div>';
+    }).join("");
+  }
+  function stats(){
+    var total=rows.length, guessed=rows.filter(function(r){return !!r.guess;}).length;
+    statEl.innerHTML='<span><b>'+total+'</b> whispers</span><span><b>'+guessed+'</b> guessed</span>';
+  }
+  (async function(){
+    var res=await sb.from("wall").select("*");
+    if(res.error){ list.innerHTML='<p class="empty">Couldn’t load the wall: '+esc(res.error.message)+'</p>'; return; }
+    rows=res.data||[];
+    tabs(); stats(); render();
+  })();
+})();
+</script>
+<script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
+<script src="./anon-scene.js"></script>
+</body>
+</html>
