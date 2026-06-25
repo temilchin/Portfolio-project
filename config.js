@@ -20,3 +20,10 @@ window.ANON_CONFIG = {
   MESSAGE_MAX: 500,
   HINT_MAX: 200,
 };
+
+/* Register the service worker (asset precache + instant repeat loads). */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("./sw.js").catch(function () {});
+  });
+}
