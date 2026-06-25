@@ -162,7 +162,7 @@
       // Submit (default): 3 crystalline shapes — a whispered secret taking form.
       var rimS = new THREE.PointLight(0x96c480, 1.4, 42); rimS.position.set(-5, -2, 6); scene.add(rimS);
       var geos = [new THREE.IcosahedronGeometry(1.15, 0), new THREE.OctahedronGeometry(0.95, 0), new THREE.TorusKnotGeometry(0.6, 0.2, 140, 18)];
-      var spotsS = [{ x: -4.6, y: 1.7, z: -1, s: 1 }, { x: 4.8, y: -1.9, z: 0.2, s: 0.92 }, { x: 3.6, y: 2.6, z: -2.2, s: 0.74 }];
+      var spotsS = [{ x: -7.8, y: -4.0, z: -2, s: 1 }, { x: 7.9, y: -4.0, z: -1.5, s: 0.92 }, { x: 7.6, y: 4.0, z: -3, s: 0.74 }];
       for (var i = 0; i < 3; i++) {
         var mS = new THREE.Mesh(geos[i], stdMat(0.9, 0.5));
         mS.position.set(spotsS[i].x, spotsS[i].y, spotsS[i].z); mS.scale.setScalar(spotsS[i].s);
