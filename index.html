@@ -442,7 +442,7 @@
     var CYCLE_PX = isMobile ? 2500 : 4000;
     // Absolute scroll distance over which the 3D text flies fully in. Unlike the
     // forest (which loops), the text rides this once and rests on the contact menu.
-    var TEXT_SPAN = isMobile ? 4200 : 6500;
+    var TEXT_SPAN = isMobile ? 4800 : 7400;
 
     document.body.style.height = '999999px';
 
@@ -1015,10 +1015,14 @@
 
         // After Anonym: Forest Flappy 3D — playable 3D flappy through the trees.
         { t: 'Flappy 3D', z: -236, x: 0, y: 0.25, s: 1.35, k: 'social', social: true, flappy: true, sameTab: true, url: './flappy.html' },
-        { t: 'fly through the forest', z: -236, x: 0, y: -1.45, s: 0.48, k: 'label', flappyHint: true }
+        { t: 'fly through the forest', z: -236, x: 0, y: -1.45, s: 0.48, k: 'label', flappyHint: true },
+
+        // After Flappy: Forest Drift 3D — arcade drift on a moss road.
+        { t: 'Drift 3D', z: -266, x: 0, y: 0.25, s: 1.35, k: 'social', social: true, drift: true, sameTab: true, url: './drift.html' },
+        { t: 'slide through the trees', z: -266, x: 0, y: -1.45, s: 0.48, k: 'label', driftHint: true }
       ];
 
-      var Z_NEAR = 8, Z_END = -224;
+      var Z_NEAR = 8, Z_END = -254;
       var items = [];
       var socialHits = [];
 
@@ -1187,6 +1191,8 @@
           if (sp.anonHint) { mat.color.set(0xbfe6a8); }
           if (sp.flappy) { mat.color.set(0xd4e8c8); mat.emissive.set(0x2f5a28); mat.emissiveIntensity = 0.75; }
           if (sp.flappyHint) { mat.color.set(0xb8dba8); }
+          if (sp.drift) { mat.color.set(0xd8ecc8); mat.emissive.set(0x3a5a22); mat.emissiveIntensity = 0.78; }
+          if (sp.driftHint) { mat.color.set(0xc0e0a8); }
           var mesh = new THREE.Mesh(geo, mat);
           mesh.position.set(sp.x, sp.y, sp.z);
           mesh.userData = { z: sp.z, baseOp: mat.opacity, mat: mat, baseY: sp.y, baseX: sp.x };
@@ -1194,6 +1200,8 @@
           if (sp.anonHint) mesh.userData.anonHint = true;
           if (sp.flappy) mesh.userData.flappy = true;
           if (sp.flappyHint) mesh.userData.flappyHint = true;
+          if (sp.drift) mesh.userData.drift = true;
+          if (sp.driftHint) mesh.userData.driftHint = true;
           if (sp.sameTab) mesh.userData.sameTab = true;
           // Additive bloom halo (alpha-safe: only ever ADDS light over the forest).
           var gStr = sp.social ? 0.55 : glowStrength(sp.k);
@@ -1349,11 +1357,13 @@
           }
         }
         if (socialBusy) restFrames = 6;
-        // Keep rendering while Anonym / Flappy beacons are on screen so they pulse.
+        // Keep rendering while Anonym / Flappy / Drift beacons are on screen so they pulse.
         var anonDist = camZ + 206;
         if (anonDist > 1 && anonDist < 40) restFrames = 6;
         var flappyDist = camZ + 236;
         if (flappyDist > 1 && flappyDist < 42) restFrames = 6;
+        var driftDist = camZ + 266;
+        if (driftDist > 1 && driftDist < 42) restFrames = 6;
         if (restFrames <= 0) return;
         restFrames--;
         anonT += dt;
@@ -1372,6 +1382,9 @@
         // Flappy appears after Anonym — fully open by the end of the fly-through.
         var _fg = (-208 - camZ) / 16; if (_fg < 0) _fg = 0; else if (_fg > 1) _fg = 1;
         var flappyGate = _fg * _fg * (3 - 2 * _fg);
+        // Drift appears after Flappy.
+        var _dg = (-238 - camZ) / 16; if (_dg < 0) _dg = 0; else if (_dg > 1) _dg = 1;
+        var driftGate = _dg * _dg * (3 - 2 * _dg);
 
         for (var i = 0; i < items.length; i++) {
           var m = items[i];
@@ -1387,10 +1400,12 @@
           var finalOp = op * env * m.userData.baseOp;
           if (m.userData.anon || m.userData.anonHint) finalOp *= anonGate;
           if (m.userData.flappy || m.userData.flappyHint) finalOp *= flappyGate;
+          if (m.userData.drift || m.userData.driftHint) finalOp *= driftGate;
           m.userData.mat.opacity = finalOp;
           m.visible = finalOp > 0.003;
           var anonPulse = (m.userData.anon || m.userData.anonHint) ? (0.5 + 0.5 * Math.sin(anonT * 0.0052 + (m.userData.anonHint ? -0.7 : 0))) : 0;
           var flappyPulse = (m.userData.flappy || m.userData.flappyHint) ? (0.5 + 0.5 * Math.sin(anonT * 0.0058 + (m.userData.flappyHint ? -0.9 : 0.4))) : 0;
+          var driftPulse = (m.userData.drift || m.userData.driftHint) ? (0.5 + 0.5 * Math.sin(anonT * 0.0061 + (m.userData.driftHint ? -1.1 : 0.55))) : 0;
           // Soft whoosh as a layer rushes past the camera (fires once per pass).
           if (!m.userData.social) {
             if (!m.userData.passed && dist < 2.6 && dist > -4 && speed > 0.0006) { m.userData.passed = true; Ambience.sfxWhoosh(Math.min(1, speed * 380)); }
@@ -1423,6 +1438,7 @@
             if (m.userData.social) gOp *= (1 + m.userData.hov * 0.9 + m.userData.clickT * 1.2);
             if (m.userData.anon) gOp *= (1 + anonPulse * 1.1);
             if (m.userData.flappy) gOp *= (1 + flappyPulse * 1.15);
+            if (m.userData.drift) gOp *= (1 + driftPulse * 1.18);
             m.userData.glow.opacity = gOp > 1 ? 1 : gOp;
           }
           // Contact-screen beacon: slow glow pulse + breathing to invite a click.
@@ -1434,6 +1450,10 @@
             m.userData.mat.emissiveIntensity = 0.55 + flappyPulse * 1.05 + (m.userData.hov || 0) * 0.6;
             extra *= 1 + flappyPulse * 0.08 + (m.userData.clickT || 0) * 0.2;
           }
+          if (m.userData.drift) {
+            m.userData.mat.emissiveIntensity = 0.55 + driftPulse * 1.08 + (m.userData.hov || 0) * 0.6;
+            extra *= 1 + driftPulse * 0.08 + (m.userData.clickT || 0) * 0.2;
+          }
           if (m.userData.anonHint) {
             var hintOp = finalOp * (0.3 + 0.7 * anonPulse);
             m.userData.mat.opacity = hintOp;
@@ -1443,6 +1463,11 @@
             var fHintOp = finalOp * (0.3 + 0.7 * flappyPulse);
             m.userData.mat.opacity = fHintOp;
             m.visible = fHintOp > 0.01;
+          }
+          if (m.userData.driftHint) {
+            var dHintOp = finalOp * (0.3 + 0.7 * driftPulse);
+            m.userData.mat.opacity = dHintOp;
+            m.visible = dHintOp > 0.01;
           }
           // Settle the line as it materializes: ease scale up + drift down into place.
           var sc = (0.9 + 0.1 * appear) * extra;

@@ -364,12 +364,14 @@
   try { best = parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch (e) {}
   bestLabel.textContent = 'best ' + best;
 
-  // ---- Supabase leaderboard ----
+  // ---- Supabase leaderboard + anti-cheat (run tickets) ----
   var CFG = window.ANON_CONFIG || {};
   var sb = null;
   var lastSavedScore = -1; // prevent double-submit of same run
   var pendingScore = 0;
   var boardRows = [];
+  // One-time server ticket for the current / last finished run (not on window)
+  var runSession = null; // { ticketId, salt, t0, events, sealed }
 
   function clientId() {
     try {
@@ -379,7 +381,87 @@
         localStorage.setItem(CLIENT_KEY, id);
       }
       return id;
-    } catch (e) { return 'anon'; }
+    } catch (e) { return 'anon_' + String(Date.now()); }
+  }
+
+  function sha256hex(str) {
+    if (!window.crypto || !crypto.subtle) {
+      return Promise.reject(new Error('crypto_unavailable'));
+    }
+    var data = new TextEncoder().encode(str);
+    return crypto.subtle.digest('SHA-256', data).then(function (buf) {
+      var a = new Uint8Array(buf);
+      var out = '';
+      for (var i = 0; i < a.length; i++) {
+        var h = a[i].toString(16);
+        out += h.length === 1 ? '0' + h : h;
+      }
+      return out;
+    });
+  }
+
+  var runTicketPromise = null;
+  var runLocalT0 = 0;
+  var runEventCount = 0;
+
+  async function beginRunTicket() {
+    runSession = null;
+    runLocalT0 = performance.now();
+    runEventCount = 0;
+    if (!sb) {
+      runTicketPromise = Promise.resolve(null);
+      return null;
+    }
+    runTicketPromise = (async function () {
+      try {
+        var res = await sb.rpc('game_begin_run', {
+          p_game: 'flappy',
+          p_client_id: clientId()
+        });
+        if (res.error) throw res.error;
+        var row = (res.data && res.data[0]) || res.data || null;
+        if (!row || !row.ticket_id || !row.salt) return null;
+        runSession = {
+          ticketId: row.ticket_id,
+          salt: row.salt,
+          t0: runLocalT0,
+          sealed: false
+        };
+        return runSession;
+      } catch (e) {
+        runSession = null;
+        return null;
+      }
+    })();
+    return runTicketPromise;
+  }
+
+  function noteRunEvent() {
+    if (!runSession || !runSession.sealed) runEventCount += 1;
+  }
+
+  function sealRunForSubmit(scoreVal) {
+    var sess = runSession;
+    if (sess) sess.sealed = true;
+    return {
+      score: Math.max(0, Math.floor(scoreVal || 0)),
+      durationMs: Math.max(0, Math.floor(performance.now() - (runLocalT0 || performance.now()))),
+      events: Math.max(0, runEventCount | 0),
+      ticketId: sess ? sess.ticketId : null,
+      salt: sess ? sess.salt : null
+    };
+  }
+
+  async function sealRunWhenReady(scoreVal) {
+    if (runTicketPromise) {
+      try {
+        await Promise.race([
+          runTicketPromise,
+          new Promise(function (r) { setTimeout(r, 2500); })
+        ]);
+      } catch (e) {}
+    }
+    return sealRunForSubmit(scoreVal);
   }
 
   function loadSavedName() {
@@ -480,10 +562,18 @@
       name_taken: { ok: false, text: '“' + name + '” is already taken on another device. Pick a different name.' },
       bad_name: { ok: false, text: 'Enter a name (1–24 characters).' },
       bad_score: { ok: false, text: 'Score must be at least 1 to save.' },
-      bad_client: { ok: false, text: 'Couldn’t ID this device — try another browser or clear site data carefully.' }
+      bad_client: { ok: false, text: 'Couldn’t ID this device — try another browser or clear site data carefully.' },
+      bad_ticket: { ok: false, text: 'Run session invalid — play again then save.' },
+      ticket_used: { ok: false, text: 'This run was already submitted. Fly again for a new score.' },
+      expired: { ok: false, text: 'Run expired — start a new flight.' },
+      impossible: { ok: false, text: 'Score rejected (didn’t match a real run). Play fairly.' },
+      bad_proof: { ok: false, text: 'Score rejected (integrity check failed).' },
+      rate_limited: { ok: false, text: 'Too many saves — wait a bit and try again.' }
     };
     return map[status] || { ok: false, text: 'Couldn’t save — please try again.' };
   }
+
+  var pendingRun = null; // sealed metrics from last death
 
   async function submitScore() {
     if (!sb) {
@@ -504,17 +594,32 @@
       if (saveMsg) { saveMsg.textContent = 'This run is already saved.'; saveMsg.className = 'save-msg'; }
       return;
     }
+    if (!pendingRun || !pendingRun.ticketId || !pendingRun.salt) {
+      if (saveMsg) {
+        saveMsg.textContent = 'No verified run — play a full flight, then save. (Re-run flappy_leaderboard.sql if this keeps failing.)';
+        saveMsg.className = 'save-msg err';
+      }
+      return;
+    }
 
     rememberName(name);
     saveScoreBtn.disabled = true;
     if (saveMsg) { saveMsg.textContent = 'Saving…'; saveMsg.className = 'save-msg'; }
 
     try {
-      // Server enforces: unique name, device claim, update-only-if-better
+      var cid = clientId();
+      var proof = await sha256hex(
+        pendingRun.salt + '|' + pendingScore + '|' + pendingRun.durationMs
+        + '|' + pendingRun.events + '|' + cid + '|flappy'
+      );
       var res = await sb.rpc('flappy_submit_score', {
         p_name: name,
         p_score: pendingScore,
-        p_client_id: clientId()
+        p_client_id: cid,
+        p_ticket_id: pendingRun.ticketId,
+        p_duration_ms: pendingRun.durationMs,
+        p_events: pendingRun.events,
+        p_proof: proof
       });
       if (res.error) throw res.error;
       var row = (res.data && res.data[0]) || res.data || null;
@@ -523,6 +628,9 @@
       var mapped = mapSubmitStatus(row.status, row.best_score, row.player_name || name);
       if (row.ok || row.status === 'not_better') {
         lastSavedScore = pendingScore;
+        // Ticket is one-shot — burn local copy
+        pendingRun = null;
+        runSession = null;
         if (row.best_score != null && row.best_score > best) {
           best = row.best_score;
           try { localStorage.setItem(BEST_KEY, String(best)); } catch (e) {}
@@ -530,6 +638,11 @@
           var fb = document.getElementById('finalBest');
           if (fb) fb.textContent = String(best);
         }
+      } else if (row.status === 'bad_ticket' || row.status === 'ticket_used'
+                 || row.status === 'expired' || row.status === 'impossible'
+                 || row.status === 'bad_proof') {
+        pendingRun = null;
+        runSession = null;
       }
       if (saveMsg) {
         saveMsg.textContent = mapped.text;
@@ -538,12 +651,14 @@
       await fetchLeaderboard();
     } catch (e) {
       var msg = (e && e.message) ? e.message : 'Save failed';
-      if (/function|flappy_submit_score|does not exist|schema cache/i.test(msg)) {
-        msg = 'Server function missing — re-run flappy_leaderboard.sql in Supabase SQL Editor.';
+      if (/function|flappy_submit_score|game_begin_run|does not exist|schema cache/i.test(msg)) {
+        msg = 'Anti-cheat SQL missing — re-run flappy_leaderboard.sql in Supabase SQL Editor.';
       } else if (/relation|does not exist/i.test(msg)) {
         msg = 'Table missing — run flappy_leaderboard.sql in Supabase SQL Editor.';
       } else if (/row-level security|RLS|permission/i.test(msg)) {
         msg = 'Permission denied — re-run the full flappy_leaderboard.sql script.';
+      } else if (/crypto/i.test(msg)) {
+        msg = 'This browser can’t sign scores (needs HTTPS or localhost).';
       }
       if (saveMsg) { saveMsg.textContent = msg; saveMsg.className = 'save-msg err'; }
     } finally {
@@ -1214,6 +1329,10 @@
     startPanel.classList.add('hide');
     overPanel.classList.add('hide');
     pausePanel.classList.add('hide');
+    pendingRun = null;
+    lastSavedScore = -1;
+    // Server issues a one-time ticket so console score injection can't save
+    beginRunTicket();
   }
 
   function die() {
@@ -1226,12 +1345,13 @@
     saveBest();
     pendingScore = score;
     lastSavedScore = -1;
+    pendingRun = null;
     document.getElementById('finalScore').textContent = String(score);
     document.getElementById('finalBest').textContent = String(best);
     if (saveMsg) { saveMsg.textContent = ''; saveMsg.className = 'save-msg'; }
     if (saveScoreBtn) {
-      saveScoreBtn.disabled = score <= 0;
-      saveScoreBtn.textContent = score > 0 ? 'Save to leaderboard' : 'Score 0 — fly again';
+      saveScoreBtn.disabled = true;
+      saveScoreBtn.textContent = score <= 0 ? 'Score 0 — fly again' : 'Verifying run…';
     }
     // Sync name from start field if over is empty
     if (nameOver && !sanitizeName(nameOver.value) && nameStart) {
@@ -1239,11 +1359,27 @@
     }
     overPanel.classList.remove('hide');
     fetchLeaderboard();
+    // Wait briefly for server ticket if network was slow at start
+    sealRunWhenReady(score).then(function (sealed) {
+      pendingRun = sealed;
+      if (!saveScoreBtn) return;
+      if (score <= 0) {
+        saveScoreBtn.disabled = true;
+        saveScoreBtn.textContent = 'Score 0 — fly again';
+      } else if (sealed && sealed.ticketId) {
+        saveScoreBtn.disabled = false;
+        saveScoreBtn.textContent = 'Save to leaderboard';
+      } else {
+        saveScoreBtn.disabled = true;
+        saveScoreBtn.textContent = 'Session not ready — fly again';
+      }
+    });
   }
 
   function flap() {
     if (state === 'ready') { startPlaying(); }
     if (state !== 'playing') return;
+    noteRunEvent();
     birdVy = FLAP_V;
     flapBoost = 1;
     // Burst the fly animation a bit faster on flap

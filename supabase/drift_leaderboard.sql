@@ -1,5 +1,5 @@
 -- =============================================================================
--- Forest Flappy 3D — leaderboard + anti-cheat
+-- Forest Drift 3D — leaderboard + anti-cheat
 --
 -- Rules:
 --   1. Each player_name is UNIQUE (case-insensitive).
@@ -18,7 +18,7 @@
 create extension if not exists pgcrypto with schema extensions;
 
 -- ----------------------------------------------------------------------------
--- Shared run tickets (one-time play sessions) — flappy + drift
+-- Shared run tickets (same as flappy — safe if already created)
 -- ----------------------------------------------------------------------------
 create table if not exists public.game_run_tickets (
   id           uuid primary key default gen_random_uuid(),
@@ -39,7 +39,6 @@ create index if not exists game_run_tickets_open_idx
   where used_at is null;
 
 alter table public.game_run_tickets enable row level security;
--- No policies for anon/authenticated → no direct table access from the browser.
 revoke all on public.game_run_tickets from public, anon, authenticated;
 
 create table if not exists public.game_submit_log (
@@ -56,7 +55,6 @@ create index if not exists game_submit_log_client_idx
 alter table public.game_submit_log enable row level security;
 revoke all on public.game_submit_log from public, anon, authenticated;
 
--- Begin a run: issues a one-time ticket + secret salt (used to sign the score).
 drop function if exists public.game_begin_run(text, text);
 create or replace function public.game_begin_run(
   p_game      text,
@@ -87,7 +85,6 @@ begin
     raise exception 'bad_client' using errcode = '22023';
   end if;
 
-  -- Rate: max 40 tickets / hour / client / game
   select count(*) into v_hour
     from public.game_run_tickets t
    where t.client_id = v_client
@@ -97,7 +94,6 @@ begin
     raise exception 'rate_limited' using errcode = 'P0001';
   end if;
 
-  -- Cap concurrent open tickets (prevent stockpiling)
   select count(*) into v_open
     from public.game_run_tickets t
    where t.client_id = v_client
@@ -105,7 +101,6 @@ begin
      and t.used_at is null
      and t.expires_at > now();
   if v_open >= 3 then
-    -- Expire oldest open tickets so honest retries still work
     update public.game_run_tickets t
        set expires_at = now() - interval '1 second'
      where t.id in (
@@ -118,7 +113,6 @@ begin
   end if;
 
   v_id := gen_random_uuid();
-  -- Prefer pgcrypto; fall back to UUIDs if extension schema differs
   begin
     v_salt := encode(extensions.gen_random_bytes(16), 'hex');
   exception when undefined_function then
@@ -138,39 +132,38 @@ grant execute on function public.game_begin_run(text, text) to anon, authenticat
 -- ----------------------------------------------------------------------------
 -- Scores table
 -- ----------------------------------------------------------------------------
-create table if not exists public.flappy_scores (
+create table if not exists public.drift_scores (
   id           uuid primary key default gen_random_uuid(),
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
   player_name  text not null
                  check (char_length(btrim(player_name)) between 1 and 24),
   score        integer not null
-                 check (score >= 0 and score <= 5000),
+                 check (score >= 0 and score <= 5000000),
   client_id    text not null
                  check (char_length(client_id) between 4 and 80)
 );
 
-alter table public.flappy_scores
+alter table public.drift_scores
   add column if not exists updated_at timestamptz not null default now();
 
-update public.flappy_scores
+update public.drift_scores
    set client_id = 'legacy_' || left(id::text, 8)
  where client_id is null or btrim(client_id) = '';
 
-alter table public.flappy_scores
+alter table public.drift_scores
   alter column client_id set not null;
 
--- Tighten max if old constraint allowed higher
 do $$
 begin
-  alter table public.flappy_scores drop constraint if exists flappy_scores_score_check;
-  alter table public.flappy_scores
-    add constraint flappy_scores_score_check check (score >= 0 and score <= 5000);
+  alter table public.drift_scores drop constraint if exists drift_scores_score_check;
+  alter table public.drift_scores
+    add constraint drift_scores_score_check check (score >= 0 and score <= 5000000);
 exception when others then null;
 end $$;
 
-delete from public.flappy_scores a
- using public.flappy_scores b
+delete from public.drift_scores a
+ using public.drift_scores b
  where lower(btrim(a.player_name)) = lower(btrim(b.player_name))
    and a.id <> b.id
    and (
@@ -179,43 +172,43 @@ delete from public.flappy_scores a
      or (a.score = b.score and a.created_at = b.created_at and a.id::text > b.id::text)
    );
 
-create unique index if not exists flappy_scores_name_unique_idx
-  on public.flappy_scores (lower(btrim(player_name)));
+create unique index if not exists drift_scores_name_unique_idx
+  on public.drift_scores (lower(btrim(player_name)));
 
-create index if not exists flappy_scores_rank_idx
-  on public.flappy_scores (score desc, updated_at asc);
+create index if not exists drift_scores_rank_idx
+  on public.drift_scores (score desc, updated_at asc);
 
-create index if not exists flappy_scores_client_idx
-  on public.flappy_scores (client_id);
+create index if not exists drift_scores_client_idx
+  on public.drift_scores (client_id);
 
-alter table public.flappy_scores enable row level security;
+alter table public.drift_scores enable row level security;
 
-drop policy if exists "flappy public read" on public.flappy_scores;
-create policy "flappy public read" on public.flappy_scores
+drop policy if exists "drift public read" on public.drift_scores;
+create policy "drift public read" on public.drift_scores
   for select to anon, authenticated
   using (true);
 
-drop policy if exists "flappy public insert" on public.flappy_scores;
-drop policy if exists "flappy public update" on public.flappy_scores;
-drop policy if exists "flappy public delete" on public.flappy_scores;
+drop policy if exists "drift public insert" on public.drift_scores;
+drop policy if exists "drift public update" on public.drift_scores;
+drop policy if exists "drift public delete" on public.drift_scores;
 
-drop policy if exists "flappy admin all" on public.flappy_scores;
-create policy "flappy admin all" on public.flappy_scores
+drop policy if exists "drift admin all" on public.drift_scores;
+create policy "drift admin all" on public.drift_scores
   for all to authenticated
   using (true)
   with check (true);
 
-grant select on public.flappy_scores to anon, authenticated;
--- Explicitly no insert/update/delete for anon
+grant select on public.drift_scores to anon, authenticated;
 
 -- ----------------------------------------------------------------------------
--- Submit RPC (anti-cheat): ticket + proof + server-time score cap
--- Drop ALL old overloads so console one-liners with only name/score fail.
+-- Submit RPC (anti-cheat)
+-- Max theoretical: SCORE_BASE 100 × ~2.15 angle × 2.5 combo ≈ 540 pts/s
+-- Server allows 700 pts/s continuous + small base slack.
 -- ----------------------------------------------------------------------------
-drop function if exists public.flappy_submit_score(text, integer, text);
-drop function if exists public.flappy_submit_score(text, integer, text, uuid, integer, integer, text);
+drop function if exists public.drift_submit_score(text, integer, text);
+drop function if exists public.drift_submit_score(text, integer, text, uuid, integer, integer, text);
 
-create or replace function public.flappy_submit_score(
+create or replace function public.drift_submit_score(
   p_name        text,
   p_score       integer,
   p_client_id   text,
@@ -243,10 +236,9 @@ declare
   v_server_ms bigint;
   v_max_score integer;
   v_subs     int;
-  r          public.flappy_scores%rowtype;
-  -- ~2.0s per pipe in game; allow 1.35s theoretical min with slack
-  c_ms_per_point constant numeric := 1350;
-  c_abs_max      constant integer := 5000;
+  r          public.drift_scores%rowtype;
+  c_pts_per_sec  constant numeric := 700;
+  c_abs_max      constant integer := 5000000;
 begin
   if v_name is null or char_length(v_name) < 1 or char_length(v_name) > 24 then
     return query select false, 'bad_name'::text, 0, null::text;
@@ -264,17 +256,16 @@ begin
   end if;
 
   if p_ticket_id is null or p_duration_ms is null or p_duration_ms < 0
-     or p_events is null or p_events < 0 or p_events > 1000000
+     or p_events is null or p_events < 0 or p_events > 10000000
      or v_proof is null or char_length(v_proof) < 32 then
     return query select false, 'bad_ticket'::text, 0, v_name;
     return;
   end if;
 
-  -- Rate limit successful-looking attempts
   select count(*) into v_subs
     from public.game_submit_log g
    where g.client_id = v_client
-     and g.game = 'flappy'
+     and g.game = 'drift'
      and g.created_at > now() - interval '1 hour';
   if v_subs >= 25 then
     return query select false, 'rate_limited'::text, 0, v_name;
@@ -291,7 +282,7 @@ begin
     return;
   end if;
 
-  if v_ticket.game is distinct from 'flappy'
+  if v_ticket.game is distinct from 'drift'
      or v_ticket.client_id is distinct from v_client then
     return query select false, 'bad_ticket'::text, 0, v_name;
     return;
@@ -307,17 +298,15 @@ begin
     return;
   end if;
 
-  -- Server wall-clock is authoritative (blocks faking a long run in 1ms)
   v_server_ms := greatest(0, floor(extract(epoch from (now() - v_ticket.issued_at)) * 1000))::bigint;
 
-  -- Ticket must have been open long enough for this score
+  -- Max points from continuous perfect drift + 2s grace for UI lag
   v_max_score := least(
     c_abs_max,
-    greatest(0, floor(v_server_ms::numeric / c_ms_per_point)::integer) + 1
+    greatest(0, floor((v_server_ms::numeric / 1000.0) * c_pts_per_sec)::integer) + 500
   );
 
   if p_score > v_max_score then
-    -- Mark ticket burned so they can't retry after waiting without a new run
     update public.game_run_tickets
        set used_at = now(), score_submitted = p_score
      where id = v_ticket.id;
@@ -325,7 +314,6 @@ begin
     return;
   end if;
 
-  -- Client duration must roughly match wall clock (anti time-travel)
   if p_duration_ms > v_server_ms + 8000
      or p_duration_ms < greatest(0, v_server_ms - 60000) * 0.35 then
     update public.game_run_tickets
@@ -335,8 +323,8 @@ begin
     return;
   end if;
 
-  -- Events sanity: at least a few flaps for multi-pipe scores
-  if p_score >= 3 and p_events < greatest(1, p_score / 3) then
+  -- Events = frames spent drifting-ish; need some activity for high scores
+  if p_score >= 2000 and p_events < 30 then
     update public.game_run_tickets
        set used_at = now(), score_submitted = p_score
      where id = v_ticket.id;
@@ -344,11 +332,10 @@ begin
     return;
   end if;
 
-  -- Proof: sha256(salt|score|duration|events|client)
   v_expect := encode(
     extensions.digest(
       (v_ticket.salt || '|' || p_score::text || '|' || p_duration_ms::text
-        || '|' || p_events::text || '|' || v_client || '|flappy')::text,
+        || '|' || p_events::text || '|' || v_client || '|drift')::text,
       'sha256'::text
     ),
     'hex'
@@ -362,9 +349,8 @@ begin
     return;
   end if;
 
-  -- Name check BEFORE burning ticket (so wrong name can be fixed)
   select * into r
-    from public.flappy_scores s
+    from public.drift_scores s
    where lower(btrim(s.player_name)) = lower(v_name)
    limit 1;
 
@@ -378,10 +364,10 @@ begin
        set used_at = now(), score_submitted = p_score
      where id = v_ticket.id;
     insert into public.game_submit_log (game, client_id, score)
-    values ('flappy', v_client, p_score);
+    values ('drift', v_client, p_score);
 
     if p_score > r.score then
-      update public.flappy_scores
+      update public.drift_scores
          set score = p_score,
              updated_at = now(),
              player_name = v_name
@@ -395,30 +381,29 @@ begin
     return;
   end if;
 
-  -- New name
   update public.game_run_tickets
      set used_at = now(), score_submitted = p_score
    where id = v_ticket.id;
   insert into public.game_submit_log (game, client_id, score)
-  values ('flappy', v_client, p_score);
+  values ('drift', v_client, p_score);
 
-  insert into public.flappy_scores (player_name, score, client_id)
+  insert into public.drift_scores (player_name, score, client_id)
   values (v_name, p_score, v_client)
   returning * into r;
   return query select true, 'created'::text, r.score, r.player_name;
 end;
 $$;
 
-revoke all on function public.flappy_submit_score(text, integer, text, uuid, integer, integer, text) from public;
-grant execute on function public.flappy_submit_score(text, integer, text, uuid, integer, integer, text) to anon, authenticated;
+revoke all on function public.drift_submit_score(text, integer, text, uuid, integer, integer, text) from public;
+grant execute on function public.drift_submit_score(text, integer, text, uuid, integer, integer, text) to anon, authenticated;
 
-drop view if exists public.flappy_leaderboard;
-create view public.flappy_leaderboard
+drop view if exists public.drift_leaderboard;
+create view public.drift_leaderboard
   with (security_invoker = off)
 as
   select id, created_at, updated_at, btrim(player_name) as player_name, score
-    from public.flappy_scores
+    from public.drift_scores
    order by score desc, updated_at asc
    limit 50;
 
-grant select on public.flappy_leaderboard to anon, authenticated;
+grant select on public.drift_leaderboard to anon, authenticated;

@@ -1,0 +1,29 @@
+﻿Forest Drift 3D — Sound credits
+================================
+Engine RPM loops (loop_0..5):
+  https://opengameart.org/content/racing-car-engine-sound-loops
+  (from Bandit Racer / pdsounds edits — free for games)
+
+Generic V8 Acc/Dec loops:
+  DerMeehdrescher / Meehdrescher Studios
+  https://opengameart.org/content/generic-v8-engine-sound
+  License: CC-BY-SA 4.0 — attribute DerMeehdrescher
+
+Tire squeal grit loop (squeal_grit.wav):
+  audible-edge (Tom Haigh) via OpenGameArt / qubodup
+  https://opengameart.org/content/car-tire-squeal-skid-loop
+  License: CC-BY 3.0
+
+Tire squeal sustain (squeal_sustain.mp3) + screech one-shots:
+  BigSoundBank / Dorian CLAIR — CC0 (public domain)
+  https://bigsoundbank.com/
+  - Tire squeal #500 (long continuous)
+  - Screeching tires #1–4
+
+Forest wind / birds / crash / whoosh:
+  BigSoundBank — CC0
+  https://bigsoundbank.com/
+
+UI clicks / confirm / error / win:
+  Kenney.nl Interface Sounds — CC0
+  https://kenney.nl/assets/interface-sounds
