@@ -1,0 +1,24 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+.idea/
+.vscode/
+
+# Secrets (never commit real service_role / .env)
+.env
+.env.*
+!.env.example
+**/service_role*
+**/*secret*
+
+# Unused / bulk source packs (game uses flappy-assets/models only)
+flappy-assets/kenney_nature-kit.zip
+flappy-assets/kenney-nature/
+flappy-assets/duck.glb
+forest-loop1.mp4
+
+# Optional local junk
+*.log
+node_modules/

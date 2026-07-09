@@ -1,0 +1,1610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<title>Forest Flappy 3D — Bosithon</title>
+<meta name="theme-color" content="#060905">
+<meta name="description" content="3D Flappy Bird through a moss-green forest — tap to fly.">
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="./logo-b-mark.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --accent: #8fb882;
+    --accent-2: #96c480;
+    --bg: #060905;
+    --ink: #e9efe6;
+    --muted: #9fb39a;
+    --line: rgba(150,196,128,.22);
+    --danger: #d98b6a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: Inter, system-ui, sans-serif; font-weight: 300;
+    overflow: hidden; -webkit-font-smoothing: antialiased;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #game {
+    position: fixed; inset: 0; width: 100%; height: 100%; display: block;
+    background: radial-gradient(ellipse at 50% 30%, #0d1610 0%, #060905 70%);
+  }
+  #vignette {
+    position: fixed; inset: 0; pointer-events: none; z-index: 2;
+    background: radial-gradient(ellipse at center, transparent 42%, rgba(4,8,3,.72) 100%);
+  }
+  .hud {
+    position: fixed; z-index: 10; left: 0; right: 0;
+    padding: calc(12px + env(safe-area-inset-top)) 16px 0;
+    display: flex; align-items: flex-start; justify-content: space-between;
+    pointer-events: none;
+  }
+  .hud a.back {
+    pointer-events: auto;
+    font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--muted); text-decoration: none;
+    padding: 10px 14px; border-radius: 999px;
+    border: 1px solid var(--line); background: rgba(8,14,8,.45);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+  .hud a.back:hover { color: var(--accent); border-color: var(--accent); }
+  .score-wrap { text-align: center; flex: 1; pointer-events: none; }
+  .score {
+    font-family: "Cormorant Garamond", Georgia, serif; font-weight: 300;
+    font-size: clamp(42px, 10vw, 72px); line-height: 1; color: #f2f7ee;
+    text-shadow: 0 2px 24px rgba(0,0,0,.85), 0 0 40px rgba(143,184,130,.35);
+  }
+  .best {
+    font-size: 11px; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--muted); margin-top: 4px;
+  }
+  .spacer { width: 88px; }
+  @media (max-width: 480px) { .spacer { width: 64px; } .hud a.back { font-size: 10px; padding: 8px 10px; } }
+
+  .panel {
+    position: fixed; inset: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom));
+    background: radial-gradient(ellipse at center, rgba(8,14,8,.55), rgba(4,8,3,.88));
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    transition: opacity .35s ease, visibility .35s ease;
+  }
+  .panel.hide { opacity: 0; visibility: hidden; pointer-events: none; }
+  .card {
+    width: min(420px, 100%);
+    background: linear-gradient(160deg, rgba(18,28,18,.78), rgba(10,16,10,.72));
+    border: 1px solid var(--line); border-radius: 22px;
+    padding: 28px 24px 24px; text-align: center;
+    box-shadow: 0 30px 80px -30px rgba(0,0,0,.9);
+  }
+  .eyebrow {
+    font-size: 11px; letter-spacing: .36em; text-transform: uppercase;
+    color: var(--accent); opacity: .9; margin-bottom: 10px;
+  }
+  .card h1 {
+    font-family: "Cormorant Garamond", Georgia, serif; font-weight: 300;
+    font-size: clamp(34px, 8vw, 48px); line-height: 1.05; margin-bottom: 10px;
+  }
+  .card h1 em {
+    font-style: italic;
+    background: linear-gradient(100deg, var(--accent), #e6f6dd, var(--accent));
+    background-size: 200% auto; -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .card p { color: var(--muted); font-size: 14.5px; line-height: 1.55; margin: 0 auto 18px; max-width: 34ch; }
+  .stats {
+    display: flex; gap: 10px; justify-content: center; margin-bottom: 20px;
+  }
+  .stat {
+    min-width: 88px; padding: 10px 12px; border-radius: 14px;
+    border: 1px solid var(--line); background: rgba(0,0,0,.22);
+  }
+  .stat b {
+    display: block; font-family: "Cormorant Garamond", Georgia, serif;
+    font-size: 28px; font-weight: 300; color: var(--accent); line-height: 1.1;
+  }
+  .stat span { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%; max-width: 280px; margin: 0 auto;
+    padding: 16px 22px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--accent); background: rgba(143,184,130,.18);
+    color: #eafff0; font-family: inherit; font-size: 15px; letter-spacing: .06em;
+    transition: background .2s, transform .2s, box-shadow .3s;
+    animation: breathe 3.6s ease-in-out infinite;
+  }
+  .btn:hover, .btn:active { background: rgba(143,184,130,.3); transform: translateY(-1px); }
+  .btn.ghost {
+    margin-top: 10px; animation: none;
+    border-color: var(--line); background: transparent; color: var(--muted);
+  }
+  @keyframes breathe {
+    0%,100% { box-shadow: 0 0 0 0 rgba(143,184,130,0); }
+    50% { box-shadow: 0 0 28px 2px rgba(143,184,130,.22); }
+  }
+  .hint {
+    margin-top: 16px; font-size: 12px; color: var(--muted); letter-spacing: .04em;
+  }
+  .hint kbd {
+    display: inline-block; padding: 2px 7px; border-radius: 6px;
+    border: 1px solid var(--line); font-size: 11px; color: var(--ink);
+  }
+
+  #tap-zone {
+    position: fixed; inset: 0; z-index: 5;
+    display: none; touch-action: none;
+  }
+  body.playing #tap-zone { display: block; }
+
+  #flash {
+    position: fixed; inset: 0; z-index: 15; pointer-events: none;
+    background: rgba(217,139,106,.35); opacity: 0; transition: opacity .15s ease;
+  }
+  #flash.on { opacity: 1; }
+
+  #loader {
+    position: fixed; inset: 0; z-index: 40;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; background: var(--bg); transition: opacity .5s ease;
+  }
+  #loader.hide { opacity: 0; pointer-events: none; }
+  .ring {
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 1px solid rgba(143,184,130,.25); border-top-color: var(--accent);
+    animation: spin .9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loader .lt {
+    font-size: 10px; letter-spacing: .32em; text-transform: uppercase; color: rgba(143,184,130,.75);
+  }
+
+  /* ---- Leaderboard ---- */
+  .board {
+    margin: 16px 0 4px; text-align: left;
+    border: 1px solid var(--line); border-radius: 14px;
+    background: rgba(0,0,0,.22); overflow: hidden;
+  }
+  .board-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; border-bottom: 1px solid var(--line);
+    font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted);
+  }
+  .board-head button {
+    background: none; border: none; color: var(--accent); font: inherit;
+    font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+    cursor: pointer; padding: 0;
+  }
+  .board-list { max-height: 168px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .board-row {
+    display: grid; grid-template-columns: 28px 1fr auto; gap: 8px;
+    align-items: center; padding: 8px 14px;
+    border-bottom: 1px solid rgba(150,196,128,.08);
+    font-size: 13.5px;
+  }
+  .board-row:last-child { border-bottom: 0; }
+  .board-row .rk { color: var(--accent); font-variant-numeric: tabular-nums; opacity: .85; }
+  .board-row .nm {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink);
+  }
+  .board-row .sc {
+    font-family: "Cormorant Garamond", Georgia, serif; font-size: 18px;
+    color: var(--accent); font-variant-numeric: tabular-nums;
+  }
+  .board-row.me { background: rgba(143,184,130,.1); }
+  .board-row.me .nm { color: #eafff0; }
+  .board-empty, .board-err {
+    padding: 14px; text-align: center; color: var(--muted); font-size: 13px; font-style: italic;
+  }
+  .board-err { color: var(--danger); font-style: normal; }
+  .name-row { margin: 14px 0 10px; text-align: left; }
+  .name-row label {
+    display: block; font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 6px;
+  }
+  .name-row input {
+    width: 100%; box-sizing: border-box;
+    background: rgba(0,0,0,.28); border: 1px solid var(--line); border-radius: 12px;
+    color: var(--ink); font-family: inherit; font-size: 15px; padding: 12px 14px;
+  }
+  .name-row input:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(143,184,130,.12);
+  }
+  .save-msg {
+    min-height: 1.2em; margin: 8px 0 0; font-size: 12.5px; color: var(--muted);
+  }
+  .save-msg.ok { color: var(--accent); }
+  .save-msg.err { color: var(--danger); }
+  .card .btn + .btn { margin-top: 10px; }
+  .btn[disabled] { opacity: .5; cursor: not-allowed; animation: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .btn, .ring { animation: none; }
+  }
+</style>
+</head>
+<body>
+  <div id="loader">
+    <div class="ring"></div>
+    <div class="lt">Growing the forest…</div>
+  </div>
+
+  <canvas id="game"></canvas>
+  <div id="vignette"></div>
+  <div id="flash"></div>
+  <div id="tap-zone" aria-hidden="true"></div>
+
+  <header class="hud">
+    <a class="back" href="./index.html">← forest</a>
+    <div class="score-wrap">
+      <div class="score" id="score">0</div>
+      <div class="best" id="bestLabel">best 0</div>
+    </div>
+    <div class="spacer"></div>
+  </header>
+
+  <div class="panel" id="startPanel">
+    <div class="card">
+      <p class="eyebrow">Forest · Flappy 3D</p>
+      <h1>Fly through<br><em>the forest.</em></h1>
+      <p>Classic Flappy pipes, an animated parrot, and a live leaderboard — beat your friends.</p>
+
+      <div class="name-row">
+        <label for="playerNameStart">Your pilot name (unique — claimed by this device)</label>
+        <input id="playerNameStart" type="text" maxlength="24" placeholder="e.g. Bosithon" autocomplete="nickname" enterkeyhint="done">
+      </div>
+
+      <div class="board" id="startBoard">
+        <div class="board-head">
+          <span>Leaderboard</span>
+          <button type="button" id="refreshBoardStart">Refresh</button>
+        </div>
+        <div class="board-list" id="startBoardList">
+          <div class="board-empty">Loading scores…</div>
+        </div>
+      </div>
+
+      <button class="btn" id="startBtn" type="button" style="margin-top:16px">Tap to fly →</button>
+      <p class="hint">
+        <span class="desktop-only"><kbd>Space</kbd> / click to flap · <kbd>P</kbd> pause</span>
+        <span class="mobile-only">Tap anywhere to flap</span>
+      </p>
+    </div>
+  </div>
+
+  <div class="panel hide" id="overPanel">
+    <div class="card">
+      <p class="eyebrow">Forest · Game over</p>
+      <h1>You hit a pipe.</h1>
+      <div class="stats">
+        <div class="stat"><b id="finalScore">0</b><span>score</span></div>
+        <div class="stat"><b id="finalBest">0</b><span>best</span></div>
+      </div>
+
+      <div class="name-row">
+        <label for="playerNameOver">Save best under your pilot name</label>
+        <input id="playerNameOver" type="text" maxlength="24" placeholder="Your name" autocomplete="nickname" enterkeyhint="done">
+      </div>
+      <button class="btn" id="saveScoreBtn" type="button">Save / update best</button>
+      <p class="save-msg" id="saveMsg"></p>
+      <p class="hint" style="margin-top:6px;opacity:.85">One name per player. Same device updates your best; others can’t steal your name.</p>
+
+      <div class="board" id="overBoard" style="margin-top:12px">
+        <div class="board-head">
+          <span>Top pilots</span>
+          <button type="button" id="refreshBoardOver">Refresh</button>
+        </div>
+        <div class="board-list" id="overBoardList">
+          <div class="board-empty">Loading…</div>
+        </div>
+      </div>
+
+      <button class="btn" id="retryBtn" type="button" style="margin-top:16px">Fly again →</button>
+      <a class="btn ghost" href="./index.html">Back to the forest</a>
+    </div>
+  </div>
+
+  <div class="panel hide" id="pausePanel">
+    <div class="card">
+      <p class="eyebrow">Paused</p>
+      <h1>Take a breath.</h1>
+      <p>The forest can wait.</p>
+      <button class="btn" id="resumeBtn" type="button">Resume</button>
+    </div>
+  </div>
+
+<style>
+  .mobile-only { display: none; }
+  @media (pointer: coarse) {
+    .desktop-only { display: none; }
+    .mobile-only { display: inline; }
+  }
+</style>
+
+<script src="./config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.147.0/examples/js/loaders/GLTFLoader.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // ============================================================
+  // Forest Flappy 3D + Supabase leaderboard
+  // ============================================================
+
+  var canvas = document.getElementById('game');
+  var scoreEl = document.getElementById('score');
+  var bestLabel = document.getElementById('bestLabel');
+  var startPanel = document.getElementById('startPanel');
+  var overPanel = document.getElementById('overPanel');
+  var pausePanel = document.getElementById('pausePanel');
+  var flashEl = document.getElementById('flash');
+  var loaderEl = document.getElementById('loader');
+  var tapZone = document.getElementById('tap-zone');
+  var nameStart = document.getElementById('playerNameStart');
+  var nameOver = document.getElementById('playerNameOver');
+  var saveScoreBtn = document.getElementById('saveScoreBtn');
+  var saveMsg = document.getElementById('saveMsg');
+
+  var isMobile = window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768;
+  var PERF_LOW = (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) ||
+                 (navigator.deviceMemory && navigator.deviceMemory <= 4) || false;
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var BEST_KEY = 'forest_flappy_best_v1';
+  var NAME_KEY = 'forest_flappy_name_v1';
+  var CLIENT_KEY = 'forest_flappy_client_v1';
+  var best = 0;
+  try { best = parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch (e) {}
+  bestLabel.textContent = 'best ' + best;
+
+  // ---- Supabase leaderboard ----
+  var CFG = window.ANON_CONFIG || {};
+  var sb = null;
+  var lastSavedScore = -1; // prevent double-submit of same run
+  var pendingScore = 0;
+  var boardRows = [];
+
+  function clientId() {
+    try {
+      var id = localStorage.getItem(CLIENT_KEY);
+      if (!id) {
+        id = 'c_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+        localStorage.setItem(CLIENT_KEY, id);
+      }
+      return id;
+    } catch (e) { return 'anon'; }
+  }
+
+  function loadSavedName() {
+    try {
+      var n = localStorage.getItem(NAME_KEY) || '';
+      if (nameStart) nameStart.value = n;
+      if (nameOver) nameOver.value = n;
+    } catch (e) {}
+  }
+
+  function rememberName(n) {
+    try { localStorage.setItem(NAME_KEY, n); } catch (e) {}
+    if (nameStart && nameStart.value !== n) nameStart.value = n;
+    if (nameOver && nameOver.value !== n) nameOver.value = n;
+  }
+
+  function sanitizeName(raw) {
+    var s = String(raw || '').trim().replace(/\s+/g, ' ');
+    // Strip control chars
+    s = s.replace(/[\u0000-\u001F\u007F]/g, '');
+    if (s.length > 24) s = s.slice(0, 24);
+    return s;
+  }
+
+  function esc(s) {
+    var d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+
+  function initSupabase() {
+    if (!CFG.SUPABASE_URL || CFG.SUPABASE_URL.indexOf('YOUR-') === 0) return null;
+    if (!CFG.SUPABASE_ANON_KEY || !window.supabase) return null;
+    try {
+      return window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+    } catch (e) { return null; }
+  }
+  sb = initSupabase();
+
+  function renderBoard(listEl, rows, highlightName) {
+    if (!listEl) return;
+    if (!sb) {
+      listEl.innerHTML = '<div class="board-err">Leaderboard offline — set Supabase in config.js and run flappy_leaderboard.sql</div>';
+      return;
+    }
+    if (!rows || !rows.length) {
+      listEl.innerHTML = '<div class="board-empty">No scores yet — be the first pilot.</div>';
+      return;
+    }
+    var hn = (highlightName || '').toLowerCase();
+    listEl.innerHTML = rows.map(function (r, i) {
+      var me = hn && String(r.player_name || '').toLowerCase() === hn;
+      return '<div class="board-row' + (me ? ' me' : '') + '">'
+        + '<span class="rk">' + (i + 1) + '</span>'
+        + '<span class="nm">' + esc(r.player_name) + '</span>'
+        + '<span class="sc">' + esc(r.score) + '</span>'
+        + '</div>';
+    }).join('');
+  }
+
+  async function fetchLeaderboard() {
+    if (!sb) {
+      renderBoard(document.getElementById('startBoardList'), []);
+      renderBoard(document.getElementById('overBoardList'), []);
+      return;
+    }
+    try {
+      var res = await sb
+        .from('flappy_scores')
+        .select('player_name, score, created_at, id')
+        .order('score', { ascending: false })
+        .order('created_at', { ascending: true })
+        .limit(15);
+      if (res.error) throw res.error;
+      boardRows = res.data || [];
+      var hn = sanitizeName(nameStart && nameStart.value);
+      renderBoard(document.getElementById('startBoardList'), boardRows, hn);
+      renderBoard(document.getElementById('overBoardList'), boardRows, sanitizeName(nameOver && nameOver.value));
+    } catch (e) {
+      var msg = (e && e.message) ? e.message : 'Couldn’t load board';
+      // Common: table not created yet
+      if (/relation|does not exist|permission|schema cache/i.test(msg)) {
+        msg = 'Run supabase/flappy_leaderboard.sql in your Supabase SQL Editor once.';
+      }
+      var errHtml = '<div class="board-err">' + esc(msg) + '</div>';
+      var a = document.getElementById('startBoardList');
+      var b = document.getElementById('overBoardList');
+      if (a) a.innerHTML = errHtml;
+      if (b) b.innerHTML = errHtml;
+    }
+  }
+
+  function mapSubmitStatus(status, bestScore, name) {
+    var map = {
+      created: { ok: true, text: 'Name claimed — you’re on the board as ' + name + '. 🌿' },
+      updated: { ok: true, text: 'New best! Updated to ' + bestScore + '. 🌿' },
+      not_better: { ok: true, text: 'Saved best is still ' + bestScore + ' (this run wasn’t higher).' },
+      name_taken: { ok: false, text: '“' + name + '” is already taken on another device. Pick a different name.' },
+      bad_name: { ok: false, text: 'Enter a name (1–24 characters).' },
+      bad_score: { ok: false, text: 'Score must be at least 1 to save.' },
+      bad_client: { ok: false, text: 'Couldn’t ID this device — try another browser or clear site data carefully.' }
+    };
+    return map[status] || { ok: false, text: 'Couldn’t save — please try again.' };
+  }
+
+  async function submitScore() {
+    if (!sb) {
+      if (saveMsg) { saveMsg.textContent = 'Backend not configured.'; saveMsg.className = 'save-msg err'; }
+      return;
+    }
+    var name = sanitizeName(nameOver && nameOver.value);
+    if (!name) {
+      if (saveMsg) { saveMsg.textContent = 'Enter a name first.'; saveMsg.className = 'save-msg err'; }
+      if (nameOver) nameOver.focus();
+      return;
+    }
+    if (pendingScore <= 0) {
+      if (saveMsg) { saveMsg.textContent = 'Score is 0 — fly a bit first!'; saveMsg.className = 'save-msg err'; }
+      return;
+    }
+    if (pendingScore === lastSavedScore) {
+      if (saveMsg) { saveMsg.textContent = 'This run is already saved.'; saveMsg.className = 'save-msg'; }
+      return;
+    }
+
+    rememberName(name);
+    saveScoreBtn.disabled = true;
+    if (saveMsg) { saveMsg.textContent = 'Saving…'; saveMsg.className = 'save-msg'; }
+
+    try {
+      // Server enforces: unique name, device claim, update-only-if-better
+      var res = await sb.rpc('flappy_submit_score', {
+        p_name: name,
+        p_score: pendingScore,
+        p_client_id: clientId()
+      });
+      if (res.error) throw res.error;
+      var row = (res.data && res.data[0]) || res.data || null;
+      if (!row) throw new Error('Empty response from server');
+
+      var mapped = mapSubmitStatus(row.status, row.best_score, row.player_name || name);
+      if (row.ok || row.status === 'not_better') {
+        lastSavedScore = pendingScore;
+        if (row.best_score != null && row.best_score > best) {
+          best = row.best_score;
+          try { localStorage.setItem(BEST_KEY, String(best)); } catch (e) {}
+          bestLabel.textContent = 'best ' + best;
+          var fb = document.getElementById('finalBest');
+          if (fb) fb.textContent = String(best);
+        }
+      }
+      if (saveMsg) {
+        saveMsg.textContent = mapped.text;
+        saveMsg.className = 'save-msg ' + (mapped.ok ? 'ok' : 'err');
+      }
+      await fetchLeaderboard();
+    } catch (e) {
+      var msg = (e && e.message) ? e.message : 'Save failed';
+      if (/function|flappy_submit_score|does not exist|schema cache/i.test(msg)) {
+        msg = 'Server function missing — re-run flappy_leaderboard.sql in Supabase SQL Editor.';
+      } else if (/relation|does not exist/i.test(msg)) {
+        msg = 'Table missing — run flappy_leaderboard.sql in Supabase SQL Editor.';
+      } else if (/row-level security|RLS|permission/i.test(msg)) {
+        msg = 'Permission denied — re-run the full flappy_leaderboard.sql script.';
+      }
+      if (saveMsg) { saveMsg.textContent = msg; saveMsg.className = 'save-msg err'; }
+    } finally {
+      saveScoreBtn.disabled = false;
+    }
+  }
+
+  loadSavedName();
+  fetchLeaderboard();
+  if (document.getElementById('refreshBoardStart')) {
+    document.getElementById('refreshBoardStart').onclick = function () { fetchLeaderboard(); };
+  }
+  if (document.getElementById('refreshBoardOver')) {
+    document.getElementById('refreshBoardOver').onclick = function () { fetchLeaderboard(); };
+  }
+  if (saveScoreBtn) saveScoreBtn.onclick = function () { submitScore(); };
+  if (nameOver) {
+    nameOver.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); submitScore(); }
+    });
+  }
+  if (nameStart) {
+    nameStart.addEventListener('change', function () {
+      rememberName(sanitizeName(nameStart.value));
+    });
+  }
+
+  // ---- Tuned flappy physics (frame-rate independent) ----
+  // Horizontal spacing research (classic Flappy Bird):
+  //   • Fixed distance between pipe *pairs* ≈ 220px on a ~288px-wide playfield
+  //     (~0.75 viewport widths; App Academy / MPC analyses of the original).
+  //   • At original scroll, that lands about **1.5–1.7s** between columns —
+  //     enough for 2–3 flaps to correct for the next gap.
+  // 3D needs *more* air than 2D: depth foreshortening + side camera make
+  // columns feel closer, and the player reads gap height a beat later.
+  // Target: ~1.9–2.1s between columns (time = SPAWN_EVERY / SCROLL).
+  var GRAVITY = 26;       // units / s^2 downward
+  var FLAP_V = 9.2;       // upward impulse on flap
+  var MAX_FALL = 16;
+  var MAX_RISE = 12;
+  var SCROLL = isMobile ? 4.35 : 4.75; // world units / s (slightly calmer than before)
+  var GAP = isMobile ? 3.55 : 3.4;     // vertical opening (readable in perspective)
+  var SPAWN_X = 16;                   // spawn ahead of camera
+  // Center-to-center distance between pipe columns (was ~3.3 — much too tight).
+  // 9.5 / 4.75 ≈ 2.0s desktop · 8.8 / 4.35 ≈ 2.0s mobile.
+  var SPAWN_EVERY = isMobile ? 8.8 : 9.5;
+  var BIRD_X = -1.2;
+  var WORLD_Y_MIN = -6.2;
+  var WORLD_Y_MAX = 6.2;
+  var HIT_R = 0.38; // bird collision radius
+  var PIPE_R = 0.72; // classic pipe radius (half-width for hit)
+
+  // ---- Three.js scene ----
+  var renderer = new THREE.WebGLRenderer({
+    canvas: canvas,
+    antialias: !isMobile && !PERF_LOW,
+    alpha: false,
+    powerPreference: 'high-performance'
+  });
+  renderer.setClearColor(0x060905, 1);
+  if ('outputEncoding' in renderer) renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+
+  function maxDPR() { return isMobile ? (PERF_LOW ? 1.25 : 1.6) : (PERF_LOW ? 1.5 : 2); }
+  function size() {
+    var w = window.innerWidth, h = window.innerHeight;
+    renderer.setPixelRatio(maxDPR());
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    // Slight FOV boost on tall phones so the gap stays readable.
+    camera.fov = w / h < 0.7 ? 58 : 50;
+    camera.updateProjectionMatrix();
+  }
+
+  var scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x0a1209, 0.028);
+  scene.background = new THREE.Color(0x0a1209);
+
+  var camera = new THREE.PerspectiveCamera(50, 1, 0.1, 90);
+  camera.position.set(-6.5, 0.85, 10.2);
+  camera.lookAt(2.0, 0.3, 0);
+
+  // Richer forest lighting (layered)
+  scene.add(new THREE.AmbientLight(0x9bb89a, 0.42));
+  var under = new THREE.HemisphereLight(0xd4e8c8, 0x142018, 0.55);
+  scene.add(under);
+  var key = new THREE.DirectionalLight(0xf4ffe8, 1.05);
+  key.position.set(-5, 12, 7); scene.add(key);
+  var fill = new THREE.DirectionalLight(0x6a9a60, 0.35);
+  fill.position.set(6, 3, -4); scene.add(fill);
+  var rim = new THREE.PointLight(0x8fb882, 1.25, 48);
+  rim.position.set(3, 1.5, 5); scene.add(rim);
+  var warm = new THREE.PointLight(0xc8e0a0, 0.45, 30);
+  warm.position.set(-2, 4, -3); scene.add(warm);
+
+  // Sky gradient backdrop (billboard plane behind everything)
+  var skyCanvas = document.createElement('canvas');
+  skyCanvas.width = 4; skyCanvas.height = 256;
+  var sctx = skyCanvas.getContext('2d');
+  var grd = sctx.createLinearGradient(0, 0, 0, 256);
+  grd.addColorStop(0, '#1a2e1c');
+  grd.addColorStop(0.35, '#0f1a10');
+  grd.addColorStop(0.7, '#0a1209');
+  grd.addColorStop(1, '#060905');
+  sctx.fillStyle = grd; sctx.fillRect(0, 0, 4, 256);
+  var skyTex = new THREE.CanvasTexture(skyCanvas);
+  var sky = new THREE.Mesh(
+    new THREE.PlaneGeometry(80, 50),
+    new THREE.MeshBasicMaterial({ map: skyTex, depthWrite: false })
+  );
+  sky.position.set(18, 2, -14);
+  scene.add(sky);
+
+  // Layered ground: dark moss base + mid strip + soft path tint
+  var ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(140, 48),
+    new THREE.MeshStandardMaterial({ color: 0x152416, roughness: 0.96, metalness: 0.02 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(12, WORLD_Y_MIN - 0.04, 0);
+  scene.add(ground);
+
+  var groundMid = new THREE.Mesh(
+    new THREE.PlaneGeometry(140, 10),
+    new THREE.MeshStandardMaterial({ color: 0x1e3220, roughness: 0.92, metalness: 0.03 })
+  );
+  groundMid.rotation.x = -Math.PI / 2;
+  groundMid.position.set(12, WORLD_Y_MIN - 0.02, 0);
+  scene.add(groundMid);
+
+  // Soft canopy / ceiling haze (not a hard plane)
+  var ceil = new THREE.Mesh(
+    new THREE.PlaneGeometry(140, 48),
+    new THREE.MeshStandardMaterial({
+      color: 0x0c140c, roughness: 1, metalness: 0,
+      transparent: true, opacity: 0.42, side: THREE.DoubleSide
+    })
+  );
+  ceil.rotation.x = Math.PI / 2;
+  ceil.position.set(12, WORLD_Y_MAX + 0.55, 0);
+  scene.add(ceil);
+
+  // God-ray shafts (soft vertical planes)
+  var rayGroup = new THREE.Group();
+  scene.add(rayGroup);
+  (function makeRays() {
+    var rayCanvas = document.createElement('canvas');
+    rayCanvas.width = 64; rayCanvas.height = 256;
+    var rc = rayCanvas.getContext('2d');
+    var rg = rc.createLinearGradient(0, 0, 0, 256);
+    rg.addColorStop(0, 'rgba(200,230,170,0.35)');
+    rg.addColorStop(0.5, 'rgba(180,220,150,0.08)');
+    rg.addColorStop(1, 'rgba(0,0,0,0)');
+    rc.fillStyle = rg; rc.fillRect(0, 0, 64, 256);
+    var hg = rc.createLinearGradient(0, 0, 64, 0);
+    hg.addColorStop(0, 'rgba(0,0,0,1)');
+    hg.addColorStop(0.5, 'rgba(0,0,0,0)');
+    hg.addColorStop(1, 'rgba(0,0,0,1)');
+    rc.globalCompositeOperation = 'destination-out';
+    rc.fillStyle = hg; rc.fillRect(0, 0, 64, 256);
+    var rayTex = new THREE.CanvasTexture(rayCanvas);
+    var n = PERF_LOW ? 2 : 4;
+    for (var i = 0; i < n; i++) {
+      var m = new THREE.Mesh(
+        new THREE.PlaneGeometry(3.5 + i * 0.4, 16),
+        new THREE.MeshBasicMaterial({
+          map: rayTex, transparent: true, opacity: 0.22 + i * 0.03,
+          blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+        })
+      );
+      m.position.set(4 + i * 7, 1.5, -2.5 - i * 0.8);
+      m.rotation.z = 0.08 * (i % 2 ? 1 : -1);
+      m.userData.baseX = m.position.x;
+      m.userData.ph = i * 1.7;
+      rayGroup.add(m);
+    }
+  })();
+
+  // ---- Dust motes + floating leaves ----
+  var DUST_N = PERF_LOW ? 100 : (isMobile ? 180 : 280);
+  var dustGeo = new THREE.BufferGeometry();
+  var dpos = new Float32Array(DUST_N * 3);
+  var dustData = [];
+  for (var di = 0; di < DUST_N; di++) {
+    dpos[di * 3] = (Math.random() - 0.25) * 50;
+    dpos[di * 3 + 1] = (Math.random() - 0.5) * 11;
+    dpos[di * 3 + 2] = (Math.random() - 0.5) * 18;
+    dustData.push({
+      bx: dpos[di * 3], by: dpos[di * 3 + 1], bz: dpos[di * 3 + 2],
+      ph: Math.random() * 6.28, sp: 0.25 + Math.random() * 0.7
+    });
+  }
+  dustGeo.setAttribute('position', new THREE.BufferAttribute(dpos, 3));
+  var dustMat = new THREE.PointsMaterial({
+    color: 0xd0e8c0, size: isMobile ? 0.065 : 0.05,
+    transparent: true, opacity: 0.58, depthWrite: false,
+    blending: THREE.AdditiveBlending, sizeAttenuation: true
+  });
+  var dust = new THREE.Points(dustGeo, dustMat);
+  scene.add(dust);
+
+  // ---- Model templates ----
+  var loader = new THREE.GLTFLoader();
+  var templates = {
+    bird: null,
+    birdClips: [],
+    trees: [],
+    rocks: [],
+    grass: []
+  };
+  var MODEL_BASE = './flappy-assets/models/';
+  var birdMixer = null;
+  var flyAction = null;
+
+  function loadGLB(path) {
+    return new Promise(function (resolve, reject) {
+      loader.load(path, function (gltf) {
+        resolve(gltf);
+      }, undefined, reject);
+    });
+  }
+
+  function prepScene(root) {
+    root.traverse(function (o) {
+      if (o.isMesh) {
+        o.castShadow = false;
+        o.receiveShadow = false;
+        if (o.material) {
+          o.material.metalness = Math.min(o.material.metalness || 0, 0.25);
+          o.material.roughness = Math.max(o.material.roughness || 0.6, 0.55);
+        }
+      }
+    });
+    return root;
+  }
+
+  function normalizeModel(obj, targetHeight, baseAtZero) {
+    var box = new THREE.Box3().setFromObject(obj);
+    var size = new THREE.Vector3();
+    box.getSize(size);
+    var h = Math.max(size.y, size.x, size.z, 0.01);
+    // For birds, fit largest dimension; for trees prefer height
+    var ref = baseAtZero ? (size.y || h) : h;
+    var s = targetHeight / ref;
+    obj.scale.setScalar(s);
+    box.setFromObject(obj);
+    var center = new THREE.Vector3();
+    box.getCenter(center);
+    obj.position.sub(center);
+    if (baseAtZero) {
+      box.setFromObject(obj);
+      obj.position.y -= box.min.y;
+    }
+    return obj;
+  }
+
+  function cloneTemplate(tpl) {
+    var c = tpl.clone(true);
+    c.traverse(function (o) {
+      if (o.isMesh && o.material) {
+        o.material = o.material.clone();
+      }
+    });
+    return c;
+  }
+
+  // Procedural fallback bird if GLB fails
+  function makeFallbackBird() {
+    var g = new THREE.Group();
+    var body = new THREE.Mesh(
+      new THREE.SphereGeometry(0.35, 16, 12),
+      new THREE.MeshStandardMaterial({ color: 0x3d8f4a, roughness: 0.45, metalness: 0.15, emissive: 0x1a3a18, emissiveIntensity: 0.2 })
+    );
+    body.scale.set(1.15, 0.85, 0.9);
+    g.add(body);
+    var head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.2, 12, 10),
+      new THREE.MeshStandardMaterial({ color: 0xc94a3a, roughness: 0.4, metalness: 0.1 })
+    );
+    head.position.set(0.28, 0.08, 0);
+    g.add(head);
+    var beak = new THREE.Mesh(
+      new THREE.ConeGeometry(0.07, 0.22, 8),
+      new THREE.MeshStandardMaterial({ color: 0xe8a040, roughness: 0.5 })
+    );
+    beak.rotation.z = -Math.PI / 2;
+    beak.position.set(0.48, 0.05, 0);
+    g.add(beak);
+    var wingL = new THREE.Mesh(
+      new THREE.BoxGeometry(0.35, 0.08, 0.55),
+      new THREE.MeshStandardMaterial({ color: 0x2f6b38, roughness: 0.5 })
+    );
+    wingL.position.set(0, 0.05, 0.35);
+    wingL.name = 'wingL';
+    g.add(wingL);
+    var wingR = wingL.clone();
+    wingR.position.z = -0.35;
+    wingR.name = 'wingR';
+    g.add(wingR);
+    return g;
+  }
+
+  function makeFallbackTree(kind) {
+    var g = new THREE.Group();
+    var trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.18, 0.28, 1.4, 8),
+      new THREE.MeshStandardMaterial({ color: 0x4a3520, roughness: 0.9 })
+    );
+    trunk.position.y = 0.7;
+    g.add(trunk);
+    var foliageColor = kind === 'dark' ? 0x2f4a2a : 0x4a7a40;
+    for (var i = 0; i < 3; i++) {
+      var cone = new THREE.Mesh(
+        new THREE.ConeGeometry(1.1 - i * 0.22, 1.4, 10),
+        new THREE.MeshStandardMaterial({ color: foliageColor, roughness: 0.85, flatShading: true })
+      );
+      cone.position.y = 1.5 + i * 0.85;
+      g.add(cone);
+    }
+    return g;
+  }
+
+  // ---- Classic Flappy Bird pipes (single clean pair — no double spawn) ----
+  var pipeBodyMat = new THREE.MeshStandardMaterial({
+    color: 0x6db82a, roughness: 0.42, metalness: 0.1,
+    emissive: 0x16350a, emissiveIntensity: 0.1
+  });
+  var pipeLipMat = new THREE.MeshStandardMaterial({
+    color: 0x4f9a1c, roughness: 0.38, metalness: 0.14,
+    emissive: 0x102408, emissiveIntensity: 0.08
+  });
+  var pipeCapMat = new THREE.MeshStandardMaterial({
+    color: 0x3d7a16, roughness: 0.5, metalness: 0.12
+  });
+  var pipeHighlightMat = new THREE.MeshStandardMaterial({
+    color: 0x9ae04a, roughness: 0.45, metalness: 0.06,
+    emissive: 0x2a5010, emissiveIntensity: 0.12
+  });
+
+  function makePipeSegment(height, openUp) {
+    // openUp: bottom pipe (opening at top); !openUp: top pipe (opening at bottom)
+    var g = new THREE.Group();
+    var segs = isMobile ? 18 : 28;
+    var bodyH = Math.max(height - 0.42, 0.45);
+    var r = PIPE_R * 0.9;
+
+    var body = new THREE.Mesh(
+      new THREE.CylinderGeometry(r, r, bodyH, segs),
+      pipeBodyMat
+    );
+    // Center body so lip sits flush on the gap face
+    if (openUp) {
+      body.position.y = bodyH / 2;
+    } else {
+      body.position.y = height - bodyH / 2;
+    }
+    g.add(body);
+
+    // Classic thick lip (only one — this is the “mouth” of the pipe)
+    var lipH = 0.42;
+    var lip = new THREE.Mesh(
+      new THREE.CylinderGeometry(PIPE_R * 1.22, PIPE_R * 1.22, lipH, segs),
+      pipeLipMat
+    );
+    lip.position.y = openUp ? (height - lipH / 2) : (lipH / 2);
+    g.add(lip);
+
+    // Inner rim (depth cue, not a second pipe)
+    var rim = new THREE.Mesh(
+      new THREE.TorusGeometry(PIPE_R * 0.88, 0.05, 8, segs),
+      pipeHighlightMat
+    );
+    rim.rotation.x = Math.PI / 2;
+    rim.position.y = openUp ? (height - 0.02) : 0.02;
+    g.add(rim);
+
+    // Closed end cap (far from gap) so it doesn’t look hollow/double
+    var cap = new THREE.Mesh(
+      new THREE.CircleGeometry(r * 0.98, segs),
+      pipeCapMat
+    );
+    cap.rotation.x = openUp ? Math.PI / 2 : -Math.PI / 2;
+    cap.position.y = openUp ? 0.01 : (height - 0.01);
+    g.add(cap);
+
+    return g;
+  }
+
+  function makePipePair(gapY) {
+    var group = new THREE.Group();
+    var gapTop = gapY + GAP / 2;
+    var gapBot = gapY - GAP / 2;
+
+    var botH = Math.max(gapBot - WORLD_Y_MIN, 1.0);
+    var bot = makePipeSegment(botH, true);
+    bot.position.y = WORLD_Y_MIN;
+    group.add(bot);
+
+    var topH = Math.max(WORLD_Y_MAX - gapTop, 1.0);
+    var top = makePipeSegment(topH, false);
+    top.position.y = gapTop;
+    group.add(top);
+
+    return group;
+  }
+
+  // ---- World objects ----
+  var bird = null;
+  var birdRoot = new THREE.Group();
+  scene.add(birdRoot);
+
+  var obstacles = []; // { group, x, gapY, scored, halfW }
+  var scenery = [];
+  var worldScroll = 0;
+  var lastGapY = 0;
+  var lastGapZone = -1; // 0=low 1=mid 2=high — avoid repeating the same band
+
+  var state = 'loading'; // loading | ready | playing | dead | paused
+  var score = 0;
+  var birdY = 0;
+  var birdVy = 0;
+  var flapBoost = 0;
+  var camShake = 0;
+  var timeAlive = 0;
+
+  function setScore(n) {
+    score = n;
+    scoreEl.textContent = String(score);
+  }
+
+  function saveBest() {
+    if (score > best) {
+      best = score;
+      try { localStorage.setItem(BEST_KEY, String(best)); } catch (e) {}
+    }
+    bestLabel.textContent = 'best ' + best;
+  }
+
+  function clearObstacles() {
+    for (var i = 0; i < obstacles.length; i++) {
+      scene.remove(obstacles[i].group);
+      // dispose geometries to avoid GPU pile-up on restart
+      obstacles[i].group.traverse(function (o) {
+        if (o.geometry) o.geometry.dispose();
+      });
+    }
+    obstacles.length = 0;
+  }
+
+  /**
+   * Vertical gap placement — researched / classic Flappy pattern:
+   *  • Gap *size* stays fixed; only the gap *center* varies.
+   *  • Original samples widely across a safe band (e.g. ~100–380 of 512),
+   *    not a tiny step from the previous pipe — otherwise play stays mid-linear.
+   *  • Good UX adds: (1) full-band variety so the bird must climb & dive,
+   *    (2) never the same height-zone twice in a row, (3) max step still
+   *    reachable in one inter-pipe interval (~2s at our SCROLL/SPAWN_EVERY).
+   */
+  function pickGapY() {
+    var half = GAP / 2;
+    // Safe band: leave enough pipe body above/below so holes aren’t at the floor/ceiling
+    var minY = WORLD_Y_MIN + 1.25 + half; // ~ -3.25
+    var maxY = WORLD_Y_MAX - 1.25 - half; // ~ +3.25
+    if (maxY <= minY) return 0;
+    var range = maxY - minY;
+
+    // Three bands (low / mid / high) — forces the player to change altitude
+    var zones = [
+      { a: minY, b: minY + range * 0.34 },
+      { a: minY + range * 0.33, b: minY + range * 0.67 },
+      { a: minY + range * 0.66, b: maxY }
+    ];
+
+    // Prefer a different zone than last time (classic “must move” feel)
+    var zone = (Math.random() * 3) | 0;
+    if (zone === lastGapZone) zone = (zone + 1 + ((Math.random() * 2) | 0)) % 3;
+
+    // 40%: pure random inside the chosen band
+    // 60%: push toward the outer half of low/high bands so extremes appear often
+    var z = zones[zone];
+    var t = Math.random();
+    if (zone === 0) t = t * t;                 // bias lower within low band
+    else if (zone === 2) t = 1 - (1 - t) * (1 - t); // bias higher within high band
+    var gapY = z.a + t * (z.b - z.a);
+
+    // Reachability clamp: with ~2s between pipes + flap/gravity, ~3.4u is fair
+    var MAX_STEP = 3.45;
+    if (obstacles.length > 0 && Math.abs(gapY - lastGapY) > MAX_STEP) {
+      gapY = lastGapY + (gapY > lastGapY ? MAX_STEP : -MAX_STEP);
+      gapY = THREE.MathUtils.clamp(gapY, minY, maxY);
+    }
+
+    // Minimum contrast vs previous (kills near-duplicate holes)
+    var MIN_STEP = 1.15;
+    if (obstacles.length > 0 && Math.abs(gapY - lastGapY) < MIN_STEP) {
+      var dir = (lastGapZone === 0) ? 1 : (lastGapZone === 2) ? -1 : (Math.random() < 0.5 ? 1 : -1);
+      gapY = THREE.MathUtils.clamp(lastGapY + dir * (MIN_STEP + Math.random() * 1.4), minY, maxY);
+      // re-evaluate zone for next spawn
+      var rel = (gapY - minY) / range;
+      zone = rel < 0.34 ? 0 : rel < 0.67 ? 1 : 2;
+    }
+
+    lastGapY = gapY;
+    lastGapZone = zone;
+    return gapY;
+  }
+
+  function spawnObstacle(x) {
+    // Prevent accidental double-spawn at nearly the same X
+    for (var i = 0; i < obstacles.length; i++) {
+      if (Math.abs(obstacles[i].x - x) < SPAWN_EVERY * 0.55) return;
+    }
+
+    var gapY = pickGapY();
+
+    var group = makePipePair(gapY);
+    group.position.x = x;
+    scene.add(group);
+    obstacles.push({
+      group: group,
+      x: x,
+      gapY: gapY,
+      scored: false,
+      halfW: PIPE_R * 1.12
+    });
+  }
+
+  /** Keep 2–3 unique pipe columns ahead — spacing = SPAWN_EVERY (no overlaps). */
+  function ensurePipes() {
+    var maxX = -1e9;
+    for (var i = 0; i < obstacles.length; i++) {
+      if (obstacles[i].x > maxX) maxX = obstacles[i].x;
+    }
+    if (obstacles.length === 0) maxX = SPAWN_X - SPAWN_EVERY;
+    // With wider spacing, 2 columns ahead is enough on screen; 3rd is queued.
+    var ahead = SPAWN_X + SPAWN_EVERY * 1.15;
+    var guard = 0;
+    while (maxX < ahead && guard < 5) {
+      maxX += SPAWN_EVERY;
+      spawnObstacle(maxX);
+      guard++;
+    }
+  }
+
+  function buildScenery() {
+    // Clear old scenery if re-called
+    for (var si = 0; si < scenery.length; si++) scene.remove(scenery[si].mesh);
+    scenery.length = 0;
+
+    var treeList = templates.trees.length ? templates.trees : [makeFallbackTree(), makeFallbackTree('dark')];
+    var i, t, x, z, h, layer, side;
+
+    // Layer 0 — far background silhouettes (darker, denser)
+    var farN = PERF_LOW ? 12 : 22;
+    for (i = 0; i < farN; i++) {
+      t = cloneTemplate(treeList[i % treeList.length]);
+      h = 5.5 + Math.random() * 5;
+      var b0 = new THREE.Box3().setFromObject(t);
+      var s0 = new THREE.Vector3(); b0.getSize(s0);
+      t.scale.multiplyScalar(h / Math.max(s0.y, 0.01));
+      // Dim far trees
+      t.traverse(function (o) {
+        if (o.isMesh && o.material && o.material.color) {
+          o.material = o.material.clone();
+          o.material.color.multiplyScalar(0.45);
+          o.material.transparent = true;
+          o.material.opacity = 0.85;
+        }
+      });
+      side = (i % 2 === 0) ? 1 : -1;
+      x = -8 + (i / farN) * 56 + (Math.random() - 0.5) * 2;
+      z = side * (9.5 + Math.random() * 3.5);
+      t.position.set(x, WORLD_Y_MIN, z);
+      t.rotation.y = Math.random() * Math.PI * 2;
+      scene.add(t);
+      scenery.push({ mesh: t, baseX: x, parallax: 0.18 + Math.random() * 0.08, layer: 0 });
+    }
+
+    // Layer 1 — mid forest (main readable trees, staggered rows)
+    var midN = PERF_LOW ? 14 : 26;
+    for (i = 0; i < midN; i++) {
+      t = cloneTemplate(treeList[(i * 3) % treeList.length]);
+      h = 3.2 + Math.random() * 3.8;
+      var b1 = new THREE.Box3().setFromObject(t);
+      var s1 = new THREE.Vector3(); b1.getSize(s1);
+      t.scale.multiplyScalar(h / Math.max(s1.y, 0.01));
+      side = (i % 2 === 0) ? 1 : -1;
+      // Stagger: avoid stacking on same X
+      x = -5 + (i * 2.15) + (Math.random() - 0.5) * 0.8;
+      z = side * (5.2 + (i % 3) * 0.85 + Math.random() * 0.6);
+      t.position.set(x, WORLD_Y_MIN, z);
+      t.rotation.y = Math.random() * Math.PI * 2;
+      scene.add(t);
+      scenery.push({ mesh: t, baseX: x, parallax: 0.38 + Math.random() * 0.1, layer: 1 });
+    }
+
+    // Layer 2 — near trees (larger, slower parallax, only sides so play corridor stays clear)
+    var nearN = PERF_LOW ? 6 : 12;
+    for (i = 0; i < nearN; i++) {
+      t = cloneTemplate(treeList[(i * 5) % treeList.length]);
+      h = 2.4 + Math.random() * 2.2;
+      var b2 = new THREE.Box3().setFromObject(t);
+      var s2 = new THREE.Vector3(); b2.getSize(s2);
+      t.scale.multiplyScalar(h / Math.max(s2.y, 0.01));
+      side = (i % 2 === 0) ? 1 : -1;
+      x = -3 + i * 4.2 + Math.random();
+      z = side * (3.6 + Math.random() * 0.5);
+      t.position.set(x, WORLD_Y_MIN, z);
+      t.rotation.y = Math.random() * 6;
+      scene.add(t);
+      scenery.push({ mesh: t, baseX: x, parallax: 0.62 + Math.random() * 0.08, layer: 2 });
+    }
+
+    // Rocks along the ground edges
+    if (templates.rocks.length) {
+      for (i = 0; i < (PERF_LOW ? 6 : 12); i++) {
+        t = cloneTemplate(templates.rocks[i % templates.rocks.length]);
+        t.scale.setScalar(0.7 + Math.random() * 0.9);
+        side = (i % 2 === 0) ? 1 : -1;
+        x = -4 + i * 4.5 + Math.random();
+        z = side * (4.0 + Math.random() * 2);
+        t.position.set(x, WORLD_Y_MIN, z);
+        t.rotation.y = Math.random() * 6;
+        scene.add(t);
+        scenery.push({ mesh: t, baseX: x, parallax: 0.55, layer: 2 });
+      }
+    }
+
+    // Grass clusters in front of mid trees
+    if (templates.grass.length) {
+      for (i = 0; i < (PERF_LOW ? 10 : 20); i++) {
+        t = cloneTemplate(templates.grass[i % templates.grass.length]);
+        t.scale.setScalar(1.0 + Math.random() * 1.4);
+        side = (i % 2 === 0) ? 1 : -1;
+        x = -4 + i * 2.6 + (Math.random() - 0.5);
+        z = side * (3.2 + Math.random() * 1.8);
+        t.position.set(x, WORLD_Y_MIN, z);
+        t.rotation.y = Math.random() * 6;
+        scene.add(t);
+        scenery.push({ mesh: t, baseX: x, parallax: 0.72, layer: 2 });
+      }
+    }
+  }
+
+  function resetGame() {
+    clearObstacles();
+    worldScroll = 0;
+    lastGapY = 0;
+    lastGapZone = -1;
+    setScore(0);
+    birdY = 0.4;
+    birdVy = 0;
+    flapBoost = 0;
+    camShake = 0;
+    timeAlive = 0;
+    birdRoot.position.set(BIRD_X, birdY, 0);
+    birdRoot.rotation.set(0, 0, 0);
+    ensurePipes(); // single source of truth for pipe columns
+    overPanel.classList.add('hide');
+    pausePanel.classList.add('hide');
+  }
+
+  function startPlaying() {
+    resetGame();
+    state = 'playing';
+    document.body.classList.add('playing');
+    startPanel.classList.add('hide');
+    overPanel.classList.add('hide');
+    pausePanel.classList.add('hide');
+  }
+
+  function die() {
+    if (state !== 'playing') return;
+    state = 'dead';
+    document.body.classList.remove('playing');
+    camShake = 0.55;
+    flashEl.classList.add('on');
+    setTimeout(function () { flashEl.classList.remove('on'); }, 140);
+    saveBest();
+    pendingScore = score;
+    lastSavedScore = -1;
+    document.getElementById('finalScore').textContent = String(score);
+    document.getElementById('finalBest').textContent = String(best);
+    if (saveMsg) { saveMsg.textContent = ''; saveMsg.className = 'save-msg'; }
+    if (saveScoreBtn) {
+      saveScoreBtn.disabled = score <= 0;
+      saveScoreBtn.textContent = score > 0 ? 'Save to leaderboard' : 'Score 0 — fly again';
+    }
+    // Sync name from start field if over is empty
+    if (nameOver && !sanitizeName(nameOver.value) && nameStart) {
+      nameOver.value = nameStart.value;
+    }
+    overPanel.classList.remove('hide');
+    fetchLeaderboard();
+  }
+
+  function flap() {
+    if (state === 'ready') { startPlaying(); }
+    if (state !== 'playing') return;
+    birdVy = FLAP_V;
+    flapBoost = 1;
+    // Burst the fly animation a bit faster on flap
+    if (flyAction) {
+      flyAction.timeScale = 2.4;
+      setTimeout(function () { if (flyAction) flyAction.timeScale = 1.15; }, 220);
+    }
+  }
+
+  function togglePause() {
+    if (state === 'playing') {
+      state = 'paused';
+      document.body.classList.remove('playing');
+      pausePanel.classList.remove('hide');
+    } else if (state === 'paused') {
+      state = 'playing';
+      document.body.classList.add('playing');
+      pausePanel.classList.add('hide');
+    }
+  }
+
+  // ---- Input ----
+  function onPointer(e) {
+    if (e && e.cancelable) e.preventDefault();
+    // ignore if clicking UI buttons
+    if (e && e.target && e.target.closest && e.target.closest('button,a')) return;
+    flap();
+  }
+  window.addEventListener('keydown', function (e) {
+    if (e.code === 'Space' || e.code === 'ArrowUp' || e.key === ' ') {
+      e.preventDefault();
+      flap();
+    } else if (e.code === 'KeyP' || e.key === 'Escape') {
+      togglePause();
+    } else if ((e.code === 'KeyR' || e.key === 'r') && state === 'dead') {
+      startPlaying();
+    }
+  });
+  tapZone.addEventListener('pointerdown', onPointer, { passive: false });
+  canvas.addEventListener('pointerdown', function (e) {
+    if (state === 'playing' || state === 'ready') onPointer(e);
+  }, { passive: false });
+
+  document.getElementById('startBtn').addEventListener('click', function () { startPlaying(); });
+  document.getElementById('retryBtn').addEventListener('click', function () { startPlaying(); });
+  document.getElementById('resumeBtn').addEventListener('click', function () { togglePause(); });
+
+  // ---- Collision helpers (classic AABB vs pipe gap) ----
+  function collides(obs) {
+    var dx = Math.abs(BIRD_X - obs.x);
+    if (dx > obs.halfW + HIT_R) return false;
+    var gapTop = obs.gapY + GAP / 2;
+    var gapBot = obs.gapY - GAP / 2;
+    // Safe only inside the vertical gap (original flappy rule).
+    if (birdY + HIT_R < gapTop && birdY - HIT_R > gapBot) return false;
+    return true;
+  }
+
+  // ---- Main loop ----
+  var lastT = performance.now();
+  var dustT = 0;
+
+  function tick(now) {
+    requestAnimationFrame(tick);
+    var dt = (now - lastT) / 1000;
+    lastT = now;
+    if (dt <= 0 || dt > 0.05) dt = 0.016;
+
+    dustT += dt;
+    // Parrot flying animation (morph/skeletal clips from three.js Parrot.glb)
+    if (birdMixer) birdMixer.update(dt);
+
+    // Animate dust
+    if (!reduceMotion) {
+      for (var i = 0; i < DUST_N; i++) {
+        var dd = dustData[i];
+        dpos[i * 3] = dd.bx - (worldScroll * 0.15) % 40;
+        dpos[i * 3 + 1] = dd.by + Math.sin(dustT * dd.sp + dd.ph) * 0.25;
+        dpos[i * 3 + 2] = dd.bz + Math.cos(dustT * dd.sp * 0.7 + dd.ph) * 0.15;
+      }
+      dustGeo.attributes.position.needsUpdate = true;
+    }
+
+    if (state === 'playing') {
+      timeAlive += dt;
+      // Physics
+      birdVy -= GRAVITY * dt;
+      if (birdVy < -MAX_FALL) birdVy = -MAX_FALL;
+      if (birdVy > MAX_RISE) birdVy = MAX_RISE;
+      birdY += birdVy * dt;
+      birdRoot.position.y = birdY;
+      // Pitch parrot by vertical velocity (nose up when rising)
+      var pitch = THREE.MathUtils.clamp(-birdVy * 0.07, -0.75, 0.7);
+      birdRoot.rotation.z = pitch;
+      flapBoost = Math.max(0, flapBoost - dt * 4);
+      // Fallback wing mesh flap if no mixer
+      if (bird && !birdMixer) {
+        var flapAmt = 0.35 + flapBoost * 0.8 + Math.sin(timeAlive * (10 + flapBoost * 20)) * (0.25 + flapBoost * 0.5);
+        bird.traverse(function (o) {
+          if (o.name === 'wingL') o.rotation.x = flapAmt;
+          if (o.name === 'wingR') o.rotation.x = -flapAmt;
+        });
+      }
+
+      // Scroll world
+      var dx = SCROLL * dt;
+      worldScroll += dx;
+      for (var oi = obstacles.length - 1; oi >= 0; oi--) {
+        var obs = obstacles[oi];
+        obs.x -= dx;
+        obs.group.position.x = obs.x;
+        if (!obs.scored && obs.x < BIRD_X - 0.2) {
+          obs.scored = true;
+          setScore(score + 1);
+        }
+        if (obs.x < -14) {
+          scene.remove(obs.group);
+          obs.group.traverse(function (o) { if (o.geometry) o.geometry.dispose(); });
+          obstacles.splice(oi, 1);
+        } else if (collides(obs)) {
+          die();
+        }
+      }
+      // Spawn only when the rightmost pipe is far enough (no doubles)
+      ensurePipes();
+
+      // Scenery parallax by layer
+      var wrapW = 56;
+      for (var si = 0; si < scenery.length; si++) {
+        var sc = scenery[si];
+        var sx = sc.baseX - worldScroll * sc.parallax;
+        while (sx < -14) { sx += wrapW; sc.baseX += wrapW; }
+        while (sx > wrapW + 10) { sx -= wrapW; sc.baseX -= wrapW; }
+        sc.mesh.position.x = sx;
+      }
+      var gOff = (worldScroll * 0.45) % 24;
+      ground.position.x = 12 - gOff;
+      groundMid.position.x = 12 - gOff * 1.05;
+      ceil.position.x = 12 - gOff * 0.3;
+      sky.position.x = 18 - (worldScroll * 0.08) % 10;
+
+      // Soft ray drift
+      for (var ri = 0; ri < rayGroup.children.length; ri++) {
+        var ray = rayGroup.children[ri];
+        ray.position.x = ray.userData.baseX - (worldScroll * 0.2) % 28;
+        ray.material.opacity = 0.16 + 0.08 * Math.sin(dustT * 0.7 + ray.userData.ph);
+      }
+
+      if (birdY < WORLD_Y_MIN + 0.4 || birdY > WORLD_Y_MAX - 0.3) die();
+    } else if (state === 'ready' || state === 'dead') {
+      birdRoot.position.y = Math.sin(now * 0.0025) * 0.25 + 0.3;
+      birdRoot.rotation.z = Math.sin(now * 0.002) * 0.1;
+      if (flyAction) flyAction.timeScale = 0.85;
+      // Gentle scenery drift on menu
+      for (var sj = 0; sj < scenery.length; sj++) {
+        var sc2 = scenery[sj];
+        sc2.mesh.position.x = sc2.baseX + Math.sin(now * 0.00015 + sj) * 0.15;
+      }
+    }
+
+    // Camera follow + shake
+    var targetCamY = THREE.MathUtils.clamp(birdY * 0.22, -1.2, 1.2);
+    camera.position.y += (0.85 + targetCamY - camera.position.y) * Math.min(1, dt * 4);
+    if (camShake > 0) {
+      camShake = Math.max(0, camShake - dt * 2.2);
+      camera.position.x = -6.5 + (Math.random() - 0.5) * camShake * 0.4;
+      camera.position.z = 10.2 + (Math.random() - 0.5) * camShake * 0.25;
+    } else {
+      camera.position.x = -6.5;
+      camera.position.z = 10.2;
+    }
+    camera.lookAt(1.4, birdRoot.position.y * 0.15, 0);
+
+    renderer.render(scene, camera);
+  }
+
+  // ---- Boot: load Parrot (animated) + forest scenery models ----
+  var treeFiles = [
+    'tree_pineTallA.glb', 'tree_pineTallB.glb', 'tree_pineTallC.glb', 'tree_pineTallD.glb',
+    'tree_pineTallA_detailed.glb', 'tree_pineDefaultA.glb', 'tree_pineRoundA.glb',
+    'tree_cone_dark.glb', 'tree_oak_dark.glb', 'tree_detailed_dark.glb', 'tree_pineSmallA.glb'
+  ];
+  var rockFiles = ['rock_largeA.glb', 'rock_largeB.glb', 'rock_largeC.glb'];
+  var grassFiles = ['grass.glb', 'grass_large.glb'];
+
+  function tryLoadScene(path) {
+    return loadGLB(path).then(function (gltf) {
+      return prepScene(gltf.scene || gltf.scenes[0]);
+    }).catch(function () { return null; });
+  }
+
+  function tintParrotGreen(root) {
+    // Shift parrot materials toward forest green while keeping some warmth on beak/eyes.
+    root.traverse(function (o) {
+      if (!o.isMesh || !o.material) return;
+      var mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (var mi = 0; mi < mats.length; mi++) {
+        var mat = mats[mi];
+        if (!mat || !mat.color) continue;
+        mat = mat.clone();
+        mats[mi] = mat;
+        var col = mat.color;
+        // Detect warm/red/yellow areas (beak, face) vs body
+        var r = col.r, g = col.g, b = col.b;
+        var isWarm = r > g * 1.15 && r > b * 1.1;
+        var isDark = (r + g + b) < 0.45;
+        if (isWarm && !isDark) {
+          // Beak / accents — soft olive-gold, not pure red
+          col.setRGB(
+            THREE.MathUtils.clamp(r * 0.55 + 0.25, 0, 1),
+            THREE.MathUtils.clamp(g * 0.85 + 0.35, 0, 1),
+            THREE.MathUtils.clamp(b * 0.4 + 0.08, 0, 1)
+          );
+        } else if (isDark) {
+          // Eyes / darks — deep forest
+          col.setRGB(0.08, 0.16, 0.1);
+        } else {
+          // Body/wings — push strongly toward moss green
+          col.setRGB(
+            THREE.MathUtils.clamp(r * 0.35 + 0.18, 0, 1),
+            THREE.MathUtils.clamp(g * 0.75 + 0.42, 0, 1),
+            THREE.MathUtils.clamp(b * 0.4 + 0.16, 0, 1)
+          );
+        }
+        if ('emissive' in mat) {
+          mat.emissive = new THREE.Color(0x1a3a18);
+          mat.emissiveIntensity = 0.12;
+        }
+        mat.metalness = Math.min(mat.metalness || 0, 0.2);
+        mat.roughness = Math.max(mat.roughness || 0.5, 0.45);
+      }
+      o.material = Array.isArray(o.material) ? mats : mats[0];
+    });
+  }
+
+  function setupParrot(gltf) {
+    // three.js birds demo: animations bind to the first mesh child of the scene.
+    var sceneRoot = prepScene(gltf.scene || gltf.scenes[0]);
+    var mesh = sceneRoot.children[0] || sceneRoot;
+    var g = new THREE.Group();
+    mesh.rotation.y = Math.PI / 2;
+    // Slightly larger parrot (~1.35 game units)
+    var box = new THREE.Box3().setFromObject(mesh);
+    var sz = new THREE.Vector3(); box.getSize(sz);
+    var s = 1.35 / Math.max(sz.x, sz.y, sz.z, 0.01);
+    mesh.scale.set(s, s, s);
+    box.setFromObject(mesh);
+    var c = new THREE.Vector3(); box.getCenter(c);
+    mesh.position.sub(c);
+    tintParrotGreen(mesh);
+    g.add(mesh);
+    templates.bird = g;
+    templates.birdMesh = mesh;
+    templates.birdClips = gltf.animations || [];
+    return g;
+  }
+
+  function attachBird(meshGroup) {
+    while (birdRoot.children.length) birdRoot.remove(birdRoot.children[0]);
+    bird = meshGroup;
+    birdRoot.add(bird);
+    birdMixer = null;
+    flyAction = null;
+    var animTarget = templates.birdMesh || meshGroup;
+    if (templates.birdClips && templates.birdClips.length) {
+      // Mixer must target the skinned/morph mesh that owns the tracks.
+      birdMixer = new THREE.AnimationMixer(animTarget);
+      var clip = templates.birdClips[0];
+      flyAction = birdMixer.clipAction(clip);
+      flyAction.setLoop(THREE.LoopRepeat, Infinity);
+      // Match three.js birds demo pacing
+      if (clip.duration > 0) flyAction.setDuration(Math.min(1.0, clip.duration));
+      flyAction.play();
+      flyAction.timeScale = 1.2;
+    }
+  }
+
+  Promise.all([
+    loadGLB(MODEL_BASE + 'parrot.glb').then(setupParrot).catch(function () {
+      return loadGLB(MODEL_BASE + 'bird.glb').then(function (gltf) {
+        var root = prepScene(gltf.scene || gltf.scenes[0]);
+        var g = new THREE.Group();
+        root.rotation.y = Math.PI / 2;
+        normalizeModel(root, 0.95, false);
+        g.add(root);
+        templates.bird = g;
+        templates.birdClips = gltf.animations || [];
+        return g;
+      }).catch(function () {
+        templates.bird = makeFallbackBird();
+        templates.birdClips = [];
+        return templates.bird;
+      });
+    }),
+    Promise.all(treeFiles.map(function (f) {
+      return tryLoadScene(MODEL_BASE + f).then(function (m) {
+        if (!m) return null;
+        normalizeModel(m, 5.5, true);
+        templates.trees.push(m);
+        return m;
+      });
+    })),
+    Promise.all(rockFiles.map(function (f) {
+      return tryLoadScene(MODEL_BASE + f).then(function (m) {
+        if (!m) return null;
+        normalizeModel(m, 0.9, true);
+        templates.rocks.push(m);
+        return m;
+      });
+    })),
+    Promise.all(grassFiles.map(function (f) {
+      return tryLoadScene(MODEL_BASE + f).then(function (m) {
+        if (!m) return null;
+        normalizeModel(m, 0.5, true);
+        templates.grass.push(m);
+        return m;
+      });
+    }))
+  ]).then(function () {
+    if (!templates.bird) templates.bird = makeFallbackBird();
+    if (!templates.trees.length) {
+      templates.trees.push(makeFallbackTree());
+      templates.trees.push(makeFallbackTree('dark'));
+    }
+    // Use the loaded parrot instance directly so morph/skeletal clips stay bound.
+    attachBird(templates.bird);
+    buildScenery();
+    // Single pipe stream for the start screen (no double columns)
+    lastGapY = 0;
+    lastGapZone = -1;
+    ensurePipes();
+
+    size();
+    state = 'ready';
+    loaderEl.classList.add('hide');
+    lastT = performance.now();
+    requestAnimationFrame(tick);
+  }).catch(function (err) {
+    console.error(err);
+    templates.bird = makeFallbackBird();
+    templates.trees.push(makeFallbackTree(), makeFallbackTree('dark'));
+    attachBird(templates.bird);
+    buildScenery();
+    lastGapY = 0;
+    lastGapZone = -1;
+    ensurePipes();
+    size();
+    state = 'ready';
+    loaderEl.classList.add('hide');
+    lastT = performance.now();
+    requestAnimationFrame(tick);
+  });
+
+  window.addEventListener('resize', size, { passive: true });
+  window.addEventListener('orientationchange', function () { setTimeout(size, 200); });
+
+  // Pause when tab hidden
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden && state === 'playing') togglePause();
+  });
+})();
+</script>
+</body>
+</html>
