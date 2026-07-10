@@ -14,6 +14,31 @@ body{
   font-family:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   font-weight:300;min-height:100vh;line-height:1.6;-webkit-font-smoothing:antialiased;
 }
+
+/* Forest scrollbar — shared across anonym / wall / reveal / admin */
+*{
+  scrollbar-width:thin;
+  scrollbar-color:rgba(143,184,130,.42) rgba(6,9,5,.55);
+}
+*::-webkit-scrollbar{width:8px;height:8px}
+*::-webkit-scrollbar-track{
+  background:rgba(6,9,5,.45);
+  border-radius:999px;
+  margin:6px 0;
+}
+*::-webkit-scrollbar-thumb{
+  background:linear-gradient(180deg,rgba(150,196,128,.38),rgba(143,184,130,.22));
+  border-radius:999px;
+  border:2px solid rgba(6,9,5,.55);
+  background-clip:padding-box;
+}
+*::-webkit-scrollbar-thumb:hover{
+  background:linear-gradient(180deg,rgba(180,220,160,.62),rgba(143,184,130,.45));
+  border:2px solid rgba(6,9,5,.4);
+  background-clip:padding-box;
+}
+*::-webkit-scrollbar-corner{background:transparent}
+*::-webkit-scrollbar-button{display:none;width:0;height:0}
 .fog{position:fixed;inset:0;pointer-events:none;z-index:0;
   background:radial-gradient(60% 40% at 50% 0%, rgba(143,184,130,.06), transparent 70%)}
 .wrap{position:relative;z-index:1;max-width:var(--maxw);margin:0 auto;padding:56px 22px 96px}

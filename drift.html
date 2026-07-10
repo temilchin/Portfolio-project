@@ -35,6 +35,32 @@
     touch-action: none; user-select: none; -webkit-user-select: none;
     -webkit-tap-highlight-color: transparent;
   }
+
+  /* ---- Forest scrollbar (matches moss accent, not OS grey) ---- */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(143,184,130,.42) rgba(6,9,5,.55);
+  }
+  *::-webkit-scrollbar { width: 8px; height: 8px; }
+  *::-webkit-scrollbar-track {
+    background: rgba(6,9,5,.45);
+    border-radius: 999px;
+    margin: 6px 0;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(150,196,128,.38), rgba(143,184,130,.22));
+    border-radius: 999px;
+    border: 2px solid rgba(6,9,5,.55);
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(180,220,160,.62), rgba(143,184,130,.45));
+    border: 2px solid rgba(6,9,5,.4);
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-corner { background: transparent; }
+  *::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+
   #game {
     position: fixed; inset: 0; width: 100%; height: 100%; display: block;
     background: radial-gradient(ellipse at 50% 20%, #0d1610 0%, #060905 72%);
@@ -217,17 +243,21 @@
   .panel {
     position: fixed; inset: 0; z-index: 20;
     display: flex; align-items: center; justify-content: center;
-    padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom));
+    padding: max(12px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
     background: radial-gradient(ellipse at center, rgba(8,14,8,.55), rgba(4,8,3,.88));
     backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
     transition: opacity .35s ease, visibility .35s ease;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    touch-action: pan-y; overscroll-behavior: contain;
   }
   .panel.hide { opacity: 0; visibility: hidden; pointer-events: none; }
   .card {
     width: min(400px, 100%);
-    max-height: min(92vh, 720px);
+    max-height: min(92dvh, 920px);
+    margin: auto;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    touch-action: pan-y; overscroll-behavior: contain;
     background: linear-gradient(160deg, rgba(18,28,18,.78), rgba(10,16,10,.72));
     border: 1px solid var(--line); border-radius: 22px;
     padding: 22px 20px 18px; text-align: center;
@@ -259,44 +289,64 @@
   }
   .stats { display: flex; gap: 10px; justify-content: center; margin-bottom: 18px; flex-wrap: wrap; }
 
-  /* ---- Leaderboard (compact) ---- */
+  /* ---- Leaderboard (compact + mobile-safe) ---- */
   .board {
-    margin: 10px 0 2px; text-align: left;
+    margin: 10px 0 4px; text-align: left;
     border: 1px solid var(--line); border-radius: 12px;
     background: rgba(0,0,0,.22); overflow: hidden;
+    width: 100%;
   }
   .board-head {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 7px 12px; border-bottom: 1px solid var(--line);
-    font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted);
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 8px 12px; border-bottom: 1px solid var(--line);
+    font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
   }
   .board-head button {
     background: none; border: none; color: var(--accent); font: inherit;
     font-size: 9px; letter-spacing: .1em; text-transform: uppercase;
-    cursor: pointer; padding: 0;
+    cursor: pointer; padding: 6px 4px; min-height: 30px; flex-shrink: 0;
   }
-  .board-list { max-height: 132px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .board-list {
+    max-height: min(180px, 30vh);
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    touch-action: pan-y; overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  .panel, .card, .board-list {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(143,184,130,.45) rgba(6,9,5,.4);
+  }
   .board-row {
-    display: grid; grid-template-columns: 22px 1fr auto; gap: 6px;
-    align-items: center; padding: 5px 12px;
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) minmax(44px, auto);
+    gap: 6px;
+    align-items: center;
+    padding: 7px 12px;
     border-bottom: 1px solid rgba(150,196,128,.08);
     font-size: 12.5px;
+    min-width: 0;
   }
   .board-row:last-child { border-bottom: 0; }
-  .board-row .rk { color: var(--accent); font-variant-numeric: tabular-nums; opacity: .85; font-size: 11px; }
+  .board-row .rk {
+    color: var(--accent); font-variant-numeric: tabular-nums; opacity: .85;
+    font-size: 11px; text-align: center;
+  }
   .board-row .nm {
+    min-width: 0;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink);
   }
   .board-row .sc {
     font-family: "Cormorant Garamond", Georgia, serif; font-size: 15px;
     color: var(--accent); font-variant-numeric: tabular-nums;
+    text-align: right; white-space: nowrap; padding-left: 4px;
   }
   .board-row.me { background: rgba(143,184,130,.1); }
   .board-row.me .nm { color: #eafff0; }
   .board-empty, .board-err {
-    padding: 10px; text-align: center; color: var(--muted); font-size: 12px; font-style: italic;
+    padding: 10px 12px; text-align: center; color: var(--muted); font-size: 12px; font-style: italic;
+    word-break: break-word;
   }
-  .board-err { color: var(--danger); font-style: normal; font-size: 11.5px; line-height: 1.35; }
+  .board-err { color: var(--danger); font-style: normal; font-size: 11.5px; line-height: 1.4; }
   .name-row { margin: 10px 0 8px; text-align: left; }
   .name-row label {
     display: block; font-size: 9px; letter-spacing: .14em; text-transform: uppercase;
@@ -305,7 +355,7 @@
   .name-row input {
     width: 100%; box-sizing: border-box;
     background: rgba(0,0,0,.28); border: 1px solid var(--line); border-radius: 10px;
-    color: var(--ink); font-family: inherit; font-size: 14px; padding: 10px 12px;
+    color: var(--ink); font-family: inherit; font-size: 16px; padding: 10px 12px;
   }
   .name-row input:focus {
     outline: none; border-color: var(--accent);
@@ -313,6 +363,7 @@
   }
   .save-msg {
     min-height: 1em; margin: 4px 0 0; font-size: 11.5px; color: var(--muted);
+    line-height: 1.4; word-break: break-word;
   }
   .save-msg.ok { color: var(--accent); }
   .save-msg.err { color: var(--danger); }
@@ -438,6 +489,39 @@
     .hud a.back { font-size: 10px; padding: 8px 10px; }
     .card { padding: 18px 14px 14px; border-radius: 18px; }
     .card h1 { font-size: clamp(26px, 8vw, 38px) !important; }
+  }
+
+  /* Phones / short screens: full sheet scrolls, leaderboard readable */
+  @media (max-width: 480px), (max-height: 720px) {
+    .panel {
+      align-items: flex-start;
+      padding: max(10px, env(safe-area-inset-top)) 10px max(12px, env(safe-area-inset-bottom));
+    }
+    .card {
+      max-height: none;
+      width: 100%;
+      border-radius: 18px;
+      padding: 16px 12px 14px;
+    }
+    .card h1 { font-size: clamp(26px, 7.5vw, 36px) !important; }
+    .card p { font-size: 13px; margin-bottom: 10px; max-width: none; }
+    .card p.how-to { font-size: 14px !important; margin-bottom: 12px !important; max-width: none; }
+    .stats { gap: 6px; margin-bottom: 12px; }
+    .btn { max-width: none; padding: 14px 16px; font-size: 14px; }
+    .board { margin: 8px 0 4px; }
+    .board-list { max-height: min(160px, 26vh); }
+    .board-row {
+      grid-template-columns: 26px minmax(0, 1fr) minmax(40px, auto);
+      padding: 7px 10px; font-size: 12.5px;
+    }
+    .board-row .sc { font-size: 14px; }
+    .name-row input { font-size: 16px; } /* avoid iOS input zoom */
+  }
+  @media (orientation: landscape) and (max-height: 480px) {
+    .panel { align-items: flex-start; }
+    .card { max-width: min(520px, 96vw); padding: 12px 14px; }
+    .board-list { max-height: 96px; }
+    .card h1 { font-size: 26px !important; }
   }
 
   #flash {
@@ -790,7 +874,11 @@
   }
   sb = initSupabase();
 
-  var BOARD_LIMIT = 8;
+  var BOARD_LIMIT = (window.matchMedia && (
+    window.matchMedia('(max-width: 480px)').matches ||
+    window.matchMedia('(max-height: 700px)').matches ||
+    window.matchMedia('(pointer: coarse)').matches
+  )) ? 6 : 8;
 
   function renderBoard(listEl, rows, highlightName) {
     if (!listEl) return;
@@ -806,9 +894,10 @@
     var top = rows.slice(0, BOARD_LIMIT);
     listEl.innerHTML = top.map(function (r, i) {
       var me = hn && String(r.player_name || '').toLowerCase() === hn;
+      var name = String(r.player_name == null ? '' : r.player_name).trim() || '—';
       return '<div class="board-row' + (me ? ' me' : '') + '">'
         + '<span class="rk">' + (i + 1) + '</span>'
-        + '<span class="nm">' + esc(r.player_name) + '</span>'
+        + '<span class="nm" title="' + esc(name) + '">' + esc(name) + '</span>'
         + '<span class="sc">' + esc(fmtPts(r.score)) + '</span>'
         + '</div>';
     }).join('');

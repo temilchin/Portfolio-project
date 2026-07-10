@@ -87,6 +87,29 @@
     touch-action: pan-y; /* allow vertical scroll, block pinch/double-tap zoom jank */
   }
 
+  /* Forest scrollbar — moss green, not OS chrome */
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(143,184,130,.4) rgba(6,9,5,.85);
+  }
+  html::-webkit-scrollbar { width: 10px; }
+  html::-webkit-scrollbar-track {
+    background: linear-gradient(180deg, #060905, #0a1009);
+  }
+  html::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(150,196,128,.4), rgba(143,184,130,.22));
+    border-radius: 999px;
+    border: 2px solid #060905;
+    background-clip: padding-box;
+  }
+  html::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(180,220,160,.58), rgba(143,184,130,.4));
+    border: 2px solid #060905;
+    background-clip: padding-box;
+  }
+  html::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+  html::-webkit-scrollbar-corner { background: #060905; }
+
   #forest {
     position: fixed; top: 0; left: 0;
     width: 2px; height: 2px; opacity: 0;
@@ -223,31 +246,64 @@
   #enter-btn:hover .enter-cta { letter-spacing: 0.6em; }
   @keyframes ctaPulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
 
-  /* ---- Device advisory (shown on phones / tablets, on the Enter gate) ---- */
+  /* ---- Device advisory (phone / tablet) — visible while loading + on Enter.
+     UX: short snackbar as soon as the loader appears, not only after ready. ---- */
   #device-note {
-    position: absolute; left: 50%; bottom: calc(6% + env(safe-area-inset-bottom));
-    transform: translate(-50%, 12px); width: min(88vw, 440px);
+    position: absolute; left: 50%; bottom: calc(5% + env(safe-area-inset-bottom));
+    transform: translate(-50%, 10px); width: min(92vw, 360px);
+    z-index: 2;
     display: none; opacity: 0;
-    transition: opacity 1.1s ease .35s, transform 1.1s ease .35s;
-    flex-direction: column; align-items: center; text-align: center; gap: 9px;
-    padding: 18px 20px 20px; border-radius: 16px;
-    border: 1px solid rgba(143,184,130,0.22);
-    background: rgba(8,14,7,0.55);
-    backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px);
-    box-shadow: 0 12px 44px rgba(0,0,0,0.42);
+    transition: opacity .55s ease .15s, transform .55s ease .15s;
+    align-items: center; gap: 12px;
+    padding: 12px 12px 12px 14px; border-radius: 999px;
+    border: 1px solid rgba(143,184,130,0.28);
+    background: rgba(6,9,5,0.72);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 8px 28px rgba(0,0,0,0.4);
   }
-  #loader.ready #device-note.on { display: flex; opacity: 1; transform: translate(-50%, 0); }
-  .dn-icon { font-size: 22px; line-height: 1; opacity: .9; }
+  /* Show as soon as JS marks .on — during Preparing forest, not only after ready */
+  #device-note.on { display: flex; opacity: 1; transform: translate(-50%, 0); }
+  #device-note.dismissed {
+    opacity: 0 !important; transform: translate(-50%, 8px) !important;
+    pointer-events: none; transition: opacity .35s ease, transform .35s ease;
+  }
+  .dn-icon {
+    flex: none; width: 18px; height: 18px;
+    stroke: var(--accent); fill: none; stroke-width: 1.5;
+    stroke-linecap: round; stroke-linejoin: round; opacity: .95;
+  }
+  .dn-copy {
+    flex: 1; min-width: 0;
+    text-align: left;
+  }
   .dn-title {
-    font-family: 'Cormorant Garamond', serif; font-weight: 300;
-    font-size: 21px; letter-spacing: .01em; line-height: 1.15; color: rgba(255,255,255,0.95);
+    font-family: 'Inter', sans-serif; font-weight: 400;
+    font-size: 12px; letter-spacing: .08em; line-height: 1.2;
+    text-transform: uppercase; color: rgba(255,255,255,0.92);
+    white-space: nowrap;
   }
-  .dn-body {
-    font-family: 'Inter', sans-serif; font-weight: 300; font-size: 12.5px;
-    line-height: 1.6; letter-spacing: .015em; color: rgba(214,224,206,0.78);
+  .dn-dismiss {
+    flex: none; width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(143,184,130,0.1); border: 1px solid rgba(143,184,130,0.22);
+    color: rgba(214,224,206,0.85); font-size: 16px; line-height: 1;
+    padding: 0; cursor: pointer;
+    transition: background .25s ease, border-color .25s ease, color .25s ease;
   }
-  #device-note-kind { color: var(--accent); white-space: nowrap; }
-  @media (prefers-reduced-motion: reduce) { #device-note { transition: opacity .4s ease; } }
+  .dn-dismiss:hover, .dn-dismiss:focus-visible {
+    background: rgba(143,184,130,0.22); border-color: rgba(143,184,130,0.5);
+    color: #fff; outline: none;
+  }
+  @media (max-width: 360px) {
+    #device-note { width: min(94vw, 320px); padding: 10px 10px 10px 12px; gap: 10px; }
+    .dn-title { letter-spacing: .05em; font-size: 11.5px; }
+  }
+  @media (max-height: 480px) {
+    #device-note { bottom: calc(3% + env(safe-area-inset-bottom)); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #device-note { transition: opacity .3s ease; }
+  }
 
   /* ---- Ambient sound toggle ---- */
   #audio-toggle {
@@ -367,12 +423,47 @@
       <span class="enter-name">Bosithon</span>
       <span class="enter-cta">Enter &#8629;</span>
     </button>
-    <div id="device-note" role="note" aria-live="polite">
-      <span class="dn-icon" aria-hidden="true">&#128421;&#65039;</span>
-      <span class="dn-title">Best experienced on a larger screen</span>
-      <span class="dn-body">You&#8217;re on <span id="device-note-kind">a phone</span>. This piece runs a live 3D forest &#8212; depth, ambient sound and a magnetic cursor &#8212; that truly comes alive on a laptop or desktop. You&#8217;re welcome to explore here, but for the full experience, open it on a bigger screen.</span>
+    <div id="device-note" role="status" aria-live="polite" aria-label="Desktop recommended for the best experience">
+      <svg class="dn-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="12" rx="1.5"></rect>
+        <path d="M8 20h8M12 16v4"></path>
+      </svg>
+      <div class="dn-copy">
+        <span class="dn-title">Desktop recommended</span>
+      </div>
+      <button type="button" class="dn-dismiss" id="device-note-dismiss" aria-label="Dismiss">&#215;</button>
     </div>
   </div>
+  <!-- Early: show desktop tip during "Preparing forest" (before Three.js loads). -->
+  <script>
+  (function () {
+    try {
+      if (sessionStorage.getItem('bosithon_dn_dismissed')) return;
+      if (document.documentElement.classList.contains('skip-intro')) return;
+      var coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+      var fine = window.matchMedia && matchMedia('(pointer: fine)').matches;
+      var ua = navigator.userAgent || '';
+      var touchPad = (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+      var mobile = coarse || touchPad || /iPhone|iPad|iPod|Android|Mobile|Tablet/i.test(ua)
+        || (window.innerWidth < 768 && !fine);
+      if (!mobile) return;
+      var note = document.getElementById('device-note');
+      if (!note) return;
+      note.classList.add('on');
+      var btn = document.getElementById('device-note-dismiss');
+      if (!btn) return;
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        note.classList.add('dismissed');
+        try { sessionStorage.setItem('bosithon_dn_dismissed', '1'); } catch (x) {}
+        setTimeout(function () {
+          note.classList.remove('on');
+          note.setAttribute('hidden', '');
+        }, 380);
+      });
+    } catch (e) {}
+  })();
+  </script>
 
   <div id="nav-fade"></div>
 
@@ -502,48 +593,163 @@
       try { sessionStorage.removeItem(RELOAD_GUARD_KEY); } catch (err6) {}
     });
 
-    // Device classing: width OR a coarse pointer means "mobile" — so a phone in
-    // landscape (which can be >768px wide) still gets the lighter, optimized path.
+    // ============================================================
+    // DEVICE PROFILE  (phone | tablet | desktop)
+    // ------------------------------------------------------------
+    // Research (NN/g scrolljacking, scrollytelling practice):
+    //  • Phone: keep OS touch physics (no scroll hijack). Shorter story so
+    //    1–2 swipes show clear progress. Never "slow down" into molasses.
+    //  • Tablet: light cinematic, native touch, medium path length.
+    //  • Desktop: full Lenis + long cinematic fly-through.
+    // ============================================================
     var coarse = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-    var isMobile = window.innerWidth < 768 || coarse;
+    var finePointer = !!(window.matchMedia && window.matchMedia('(pointer: fine)').matches);
+    var ua = navigator.userAgent || '';
+    var minSide = Math.min(screen.width || 9999, screen.height || 9999);
+    // iPadOS 13+ masquerades as MacIntel desktop Safari.
+    var iPadOS = (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+    var isTabletUA = iPadOS || /iPad|Tablet|PlayBook|Silk|Kindle/i.test(ua) ||
+                     (/Android/i.test(ua) && !/Mobile/i.test(ua));
+    var isPhoneUA = /iPhone|iPod|Android.*Mobile|Windows Phone|webOS|BlackBerry|IEMobile/i.test(ua);
+
+    // Resolve class: tablet > phone > desktop (touch laptops with fine pointer stay desktop).
+    var deviceKind = 'desktop';
+    if (isTabletUA || (coarse && !isPhoneUA && (minSide >= 600 || window.innerWidth >= 768))) {
+      deviceKind = 'tablet';
+    } else if (isPhoneUA || (coarse && window.innerWidth < 768) || (coarse && minSide < 600)) {
+      deviceKind = 'phone';
+    } else if (window.innerWidth < 768 && !finePointer) {
+      deviceKind = 'phone';
+    }
+
+    // Legacy flag: any non-desktop path (GPU / capture budgets).
+    var isMobile = deviceKind !== 'desktop';
+    var isPhone = deviceKind === 'phone';
+    var isTablet = deviceKind === 'tablet';
+
+    try {
+      document.documentElement.setAttribute('data-device', deviceKind);
+      document.body.classList.add('device-' + deviceKind);
+    } catch (e) {}
+
     // Low-end heuristic (few cores / little RAM) -> render even leaner.
     var PERF_LOW = (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) ||
                    (navigator.deviceMemory && navigator.deviceMemory <= 4) || false;
-    // Clamp render resolution. Native DPR on phones is often 3+, which destroys
-    // WebGL/canvas fill-rate; the researched consensus is to cap near 2 on
-    // desktop and lower on mobile/low-end for stable FPS at imperceptible cost.
-    // Display DPR (video canvas + WebGL). Full 2x retina on both is the main
-    // scroll jank source — text/forest still look sharp at ~1.5.
-    function maxDPR() { return isMobile ? (PERF_LOW ? 1.1 : 1.35) : (PERF_LOW ? 1.35 : 1.5); }
-    function maxVideoDPR() { return isMobile ? (PERF_LOW ? 1.05 : 1.25) : (PERF_LOW ? 1.25 : 1.4); }
-    function maxWebglDPR() { return isMobile ? (PERF_LOW ? 1.05 : 1.3) : (PERF_LOW ? 1.3 : 1.5); }
-    var REF_ASPECT = 1.6; // design reference aspect; drives aspect-aware FOV below.
+
+    // Display DPR budgets by device (retina 2x on both canvases was a main jank source).
+    function maxDPR() {
+      if (isPhone) return PERF_LOW ? 1.05 : 1.25;
+      if (isTablet) return PERF_LOW ? 1.15 : 1.35;
+      return PERF_LOW ? 1.35 : 1.5;
+    }
+    function maxVideoDPR() {
+      if (isPhone) return PERF_LOW ? 1.0 : 1.15;
+      if (isTablet) return PERF_LOW ? 1.1 : 1.25;
+      return PERF_LOW ? 1.25 : 1.4;
+    }
+    function maxWebglDPR() {
+      if (isPhone) return PERF_LOW ? 1.0 : 1.2;
+      if (isTablet) return PERF_LOW ? 1.15 : 1.3;
+      return PERF_LOW ? 1.3 : 1.5;
+    }
+
+    var REF_ASPECT = 1.6;
     var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    var CYCLE_PX = isMobile ? 2500 : 4000;
-    // Absolute scroll distance over which the 3D text flies fully in. Unlike the
-    // forest (which loops), the text rides this once and rests on the contact menu.
-    var TEXT_SPAN = isMobile ? 4800 : 7400;
 
-    document.body.style.height = '999999px';
+    /*
+     * Scroll runway calibration (scrollytelling + NN/g research)
+     * ------------------------------------------------------------
+     * • Phone/tablet: NATIVE scroll only for fingers — never slow the OS
+     *   physics (scrolljacking feels worse on touch).
+     * • “Speed” is controlled by STORY LENGTH in viewports, not by
+     *   hijacking velocity. Too short = flings skip chapters (felt “too fast”).
+     * • Phone target ~9 vh for the full arc (5 chapters ≈ ~1.8 screens each).
+     *   Previous fixed 3200px was ~4 vh → rushed.
+     * • Tablet ~10.5 vh (between phone pace and desktop cinema).
+     * • Desktop: long fixed cinematic runway (unchanged feel).
+     * • Forest loop (CYCLE_PX): ~2.9–3.2 vh so a flick doesn’t whip a full loop.
+     */
+    var CYCLE_PX, TEXT_SPAN;
+    function measureVh() {
+      // Stable height: ignore extreme landscape minis; clamp for SE → Pro Max.
+      return Math.max(520, Math.min(window.innerHeight || 700, 1100));
+    }
+    function computeScrollRunway() {
+      var vh = measureVh();
+      if (isPhone) {
+        // ~9 screens of story; clamp so tiny/tall phones stay in a sane band.
+        TEXT_SPAN = Math.round(Math.max(5600, Math.min(vh * 9.0, 7800)));
+        CYCLE_PX  = Math.round(Math.max(2100, Math.min(vh * 2.9, 3000)));
+      } else if (isTablet) {
+        TEXT_SPAN = Math.round(Math.max(7600, Math.min(vh * 10.5, 11000)));
+        CYCLE_PX  = Math.round(Math.max(2700, Math.min(vh * 3.2, 3700)));
+      } else {
+        TEXT_SPAN = 7400;
+        CYCLE_PX  = 4000;
+      }
+    }
+    computeScrollRunway();
 
-    // Snappier Lenis: old lerp 0.09 + SMOOTH 0.2 stacked into double lag.
-    var lenis = new Lenis({
-      lerp: isMobile ? 0.14 : 0.16,
-      smoothWheel: true,
-      syncTouch: isMobile,
-      wheelMultiplier: isMobile ? 0.95 : 1.05,
-      touchMultiplier: isMobile ? 1.15 : 1.2,
-      infinite: false
-    });
+    // Page height: infinite forest on desktop/tablet; phone uses a finite height
+    // so the OS rubber-band / end-of-page feel stays natural after the story.
+    function applyPhonePageHeight() {
+      if (!isPhone) {
+        document.body.style.height = '999999px';
+        return;
+      }
+      var trail = Math.max(window.innerHeight * 1.45, 900);
+      document.body.style.height = Math.max(TEXT_SPAN + trail, TEXT_SPAN + 1000) + 'px';
+    }
+    applyPhonePageHeight();
+
+    /*
+     * Scroll engine:
+     *  phone  → native only (Lenis off). OS inertia / rubber-band preserved.
+     *  tablet → Lenis for wheel/trackpad only; syncTouch false (native finger).
+     *  desktop→ full Lenis cinematic smooth wheel.
+     */
+    var useLenis = !isPhone && !reduceMotion && typeof Lenis === 'function';
+    var lenis = null;
+    if (useLenis) {
+      lenis = new Lenis({
+        // Tablet: slightly snappier lerp than desktop so trackpad doesn’t feel laggy,
+        // but wheelMultiplier a touch under 1 so story doesn’t fly past.
+        lerp: isTablet ? 0.17 : 0.16,
+        smoothWheel: true,
+        // Critical: never hijack finger scrolling (NN/g: worse on touch).
+        syncTouch: false,
+        wheelMultiplier: isTablet ? 0.82 : 1.05,
+        touchMultiplier: 1,
+        infinite: false
+      });
+    }
+
     function getScroll() {
-      var s = (lenis && typeof lenis.scroll === 'number') ? lenis.scroll : window.scrollY;
-      return s || 0;
+      if (lenis && typeof lenis.scroll === 'number') return lenis.scroll || 0;
+      return window.scrollY || window.pageYOffset || 0;
+    }
+
+    function scrollToY(y, opts) {
+      opts = opts || {};
+      if (lenis && lenis.scrollTo) {
+        lenis.scrollTo(y, {
+          immediate: !!opts.immediate,
+          duration: opts.duration != null ? opts.duration : (isTablet ? 1.2 : 1.7)
+        });
+      } else if (opts.immediate || isPhone) {
+        window.scrollTo(0, y);
+      } else {
+        try {
+          window.scrollTo({ top: y, behavior: 'smooth' });
+        } catch (e) {
+          window.scrollTo(0, y);
+        }
+      }
     }
 
     // Always begin from the very top, even after a reload.
     function resetToTop() {
-      window.scrollTo(0, 0);
-      if (lenis && lenis.scrollTo) lenis.scrollTo(0, { immediate: true });
+      scrollToY(0, { immediate: true });
     }
     resetToTop();
     window.addEventListener('load', resetToTop);
@@ -698,23 +904,7 @@
       if (document.documentElement.classList.contains('skip-intro')) enterSite();
     })();
 
-    // ---- Device advisory: detect phone vs tablet and recommend a larger
-    // screen for the full experience (never shown on laptop / desktop). ----
-    (function () {
-      var note = document.getElementById('device-note');
-      if (!note) return;
-      var ua = navigator.userAgent || '';
-      var minSide = Math.min(screen.width || 9999, screen.height || 9999);
-      // iPadOS 13+ masquerades as desktop Safari, so check touch + platform too.
-      var iPadOS = (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
-      var tablet = iPadOS || /iPad|Tablet|PlayBook|Silk|Kindle/i.test(ua) || (/Android/i.test(ua) && !/Mobile/i.test(ua));
-      var kind = 'desktop';
-      if (coarse || isMobile || iPadOS) { kind = (tablet || minSide >= 600) ? 'tablet' : 'phone'; }
-      if (kind === 'desktop') return;
-      var kindEl = document.getElementById('device-note-kind');
-      if (kindEl) kindEl.textContent = (kind === 'tablet') ? 'a tablet' : 'a phone';
-      note.classList.add('on');
-    })();
+    // Device note is activated by the early inline script (while loading).
 
     // ---- Forest ink cursor (fine pointer only). Separate rAF only while the
     // pointer is active — was a permanent 18-DOM-transform loop every frame. ----
@@ -789,16 +979,23 @@
     var hasRVFC = ('requestVideoFrameCallback' in HTMLVideoElement.prototype);
     // Capture budget: smaller frames + denser timeline = smoother scrubbing at
     // lower GPU cost than 1000px × 140 canvases (previous settings).
-    var CAPTURE_MAX = isMobile ? (PERF_LOW ? 400 : 540) : (PERF_LOW ? 640 : 720);
-    var MAX_FRAMES  = isMobile ? (PERF_LOW ? 72 : 100) : (PERF_LOW ? 120 : 168);
+    var CAPTURE_MAX = isPhone ? (PERF_LOW ? 360 : 480)
+                    : isTablet ? (PERF_LOW ? 480 : 600)
+                    : (PERF_LOW ? 640 : 720);
+    var MAX_FRAMES  = isPhone ? (PERF_LOW ? 64 : 84)
+                    : isTablet ? (PERF_LOW ? 90 : 110)
+                    : (PERF_LOW ? 120 : 168);
     // Harvest faster than realtime so the loader resolves quickly (only when
     // requestVideoFrameCallback is available; the timeupdate fallback needs 1x).
-    var HARVEST_RATE = hasRVFC ? (isMobile ? 2.5 : 4) : 1;
+    var HARVEST_RATE = hasRVFC ? (isPhone ? 3 : (isTablet ? 3 : 4)) : 1;
     var HEAD_TRIM = 0.04, TAIL_TRIM = 0.08; // fallback trim when pixels can't be read
     var COVER_T = 0.92; // harvest done once playback covers this fraction of duration
-    // Snappier easing (was 0.2 → felt like double lag with Lenis).
-    var SMOOTH = isMobile ? 0.30 : 0.34;
-    var CROSSFADE_EPS = 0.01; // skip redraw when sub-frame barely moved
+    // Video scrub easing: phone tracks native scroll tightly (no Lenis lag stack).
+    // Desktop can ease a bit more for cinematic feel.
+    // Follow scroll tightly enough to feel 1:1, without snappy “rush.”
+    // Phone was 0.42 (very direct); 0.34 still tracks native scroll cleanly.
+    var SMOOTH = isPhone ? 0.34 : (isTablet ? 0.30 : 0.34);
+    var CROSSFADE_EPS = isPhone ? 0.014 : 0.01; // skip redraw when sub-frame barely moved
     var capCw = 0, capCh = 0;
     var duration = 0;
     var numFrames = 0;
@@ -1704,8 +1901,11 @@
     navItems.forEach(function (b, i) {
       b.addEventListener('click', function () {
         var target = NAV_T[i] * TEXT_SPAN;
-        if (lenis && lenis.scrollTo) lenis.scrollTo(target, { duration: 1.7 });
-        else window.scrollTo(0, target);
+        // Phone: instant jump (native). Tablet/desktop: smooth chapter rail.
+        scrollToY(target, {
+          immediate: isPhone,
+          duration: isTablet ? 1.15 : 1.7
+        });
       });
       b.addEventListener('mouseenter', function () { document.body.classList.add('link-hover'); Ambience.sfxHover(); });
       b.addEventListener('mouseleave', function () { document.body.classList.remove('link-hover'); });
@@ -1744,7 +1944,7 @@
     var lastDrawnScroll = Number.NaN;
     function loop(time) {
       requestAnimationFrame(loop);
-      lenis.raf(time);
+      if (lenis) lenis.raf(time);
 
       var dt = prevTime ? (time - prevTime) : 16.67;
       prevTime = time;
@@ -1797,8 +1997,27 @@
     // stutter, so we (a) ignore pure URL-bar height jitter and (b) trailing-
     // debounce the real work so buffers only reallocate once the viewport settles.
     var _rT = 0, _lastW = window.innerWidth, _lastH = window.innerHeight;
-    function doResize() {
+    function doResize(fromOrientation) {
+      var prevSpan = TEXT_SPAN;
+      var prevScroll = getScroll();
+      var progress = prevSpan > 0 ? prevScroll / prevSpan : 0;
+      if (progress < 0) progress = 0;
+      if (progress > 1) progress = 1;
+
       _lastW = window.innerWidth; _lastH = window.innerHeight;
+
+      // On real orientation / large height change, re-fit runway so pace stays
+      // consistent across portrait ↔ landscape (px-from-vh, not raw CSS vh).
+      if (fromOrientation || !isPhone) {
+        if (isPhone || isTablet) computeScrollRunway();
+      }
+      applyPhonePageHeight();
+
+      // Preserve story position when span changes (avoid jump after rotate).
+      if ((isPhone || isTablet) && Math.abs(TEXT_SPAN - prevSpan) > 8) {
+        scrollToY(progress * TEXT_SPAN, { immediate: true });
+      }
+
       sizeVideoCanvas();
       resize3d();
     }
@@ -1807,10 +2026,14 @@
       // Width unchanged + small height delta == mobile URL bar; skip entirely.
       if (isMobile && w === _lastW && Math.abs(h - _lastH) < 140) return;
       clearTimeout(_rT);
-      _rT = setTimeout(doResize, isMobile ? 220 : 120);
+      // Large height jump (rotate) → recompute runway; small → just layout.
+      var orientLike = isMobile && (w !== _lastW || Math.abs(h - _lastH) > 180);
+      _rT = setTimeout(function () { doResize(orientLike); }, isMobile ? 220 : 120);
     }
     window.addEventListener('resize', onResize, { passive: true });
-    window.addEventListener('orientationchange', function () { setTimeout(doResize, 300); });
+    window.addEventListener('orientationchange', function () {
+      setTimeout(function () { doResize(true); }, 300);
+    });
     if (window.visualViewport && window.visualViewport.addEventListener) {
       window.visualViewport.addEventListener('resize', onResize, { passive: true });
     }

@@ -30,6 +30,34 @@
     touch-action: none; user-select: none; -webkit-user-select: none;
     -webkit-tap-highlight-color: transparent;
   }
+
+  /* ---- Forest scrollbar (matches moss accent, not OS grey) ---- */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(143,184,130,.42) rgba(6,9,5,.55);
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-track {
+    background: rgba(6,9,5,.45);
+    border-radius: 999px;
+    margin: 6px 0;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(150,196,128,.38), rgba(143,184,130,.22));
+    border-radius: 999px;
+    border: 2px solid rgba(6,9,5,.55);
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(180,220,160,.62), rgba(143,184,130,.45));
+    border: 2px solid rgba(6,9,5,.4);
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-corner { background: transparent; }
+  *::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
   #game {
     position: fixed; inset: 0; width: 100%; height: 100%; display: block;
     background: radial-gradient(ellipse at 50% 30%, #0d1610 0%, #060905 70%);
@@ -69,14 +97,23 @@
   .panel {
     position: fixed; inset: 0; z-index: 20;
     display: flex; align-items: center; justify-content: center;
-    padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom));
+    padding: max(12px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
     background: radial-gradient(ellipse at center, rgba(8,14,8,.55), rgba(4,8,3,.88));
     backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
     transition: opacity .35s ease, visibility .35s ease;
+    /* Critical: allow scrolling the whole sheet on short phone screens */
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
   }
   .panel.hide { opacity: 0; visibility: hidden; pointer-events: none; }
   .card {
     width: min(420px, 100%);
+    max-height: min(92dvh, 920px);
+    margin: auto; /* center when short; still scrollable inside panel */
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
     background: linear-gradient(160deg, rgba(18,28,18,.78), rgba(10,16,10,.72));
     border: 1px solid var(--line); border-radius: 22px;
     padding: 28px 24px 24px; text-align: center;
@@ -98,7 +135,7 @@
   }
   .card p { color: var(--muted); font-size: 14.5px; line-height: 1.55; margin: 0 auto 18px; max-width: 34ch; }
   .stats {
-    display: flex; gap: 10px; justify-content: center; margin-bottom: 20px;
+    display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap;
   }
   .stat {
     min-width: 88px; padding: 10px 12px; border-radius: 14px;
@@ -165,51 +202,72 @@
 
   /* ---- Leaderboard ---- */
   .board {
-    margin: 16px 0 4px; text-align: left;
+    margin: 14px 0 6px; text-align: left;
     border: 1px solid var(--line); border-radius: 14px;
     background: rgba(0,0,0,.22); overflow: hidden;
+    width: 100%;
   }
   .board-head {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 14px; border-bottom: 1px solid var(--line);
-    font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted);
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 12px; border-bottom: 1px solid var(--line);
+    font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted);
   }
   .board-head button {
     background: none; border: none; color: var(--accent); font: inherit;
-    font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
-    cursor: pointer; padding: 0;
+    font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+    cursor: pointer; padding: 6px 4px; min-height: 32px; flex-shrink: 0;
   }
-  .board-list { max-height: 168px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .board-list {
+    max-height: min(220px, 32vh);
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    touch-action: pan-y; overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  .panel, .card, .board-list {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(143,184,130,.45) rgba(6,9,5,.4);
+  }
   .board-row {
-    display: grid; grid-template-columns: 28px 1fr auto; gap: 8px;
-    align-items: center; padding: 8px 14px;
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) minmax(40px, auto);
+    gap: 8px;
+    align-items: center;
+    padding: 9px 12px;
     border-bottom: 1px solid rgba(150,196,128,.08);
     font-size: 13.5px;
+    min-width: 0;
   }
   .board-row:last-child { border-bottom: 0; }
-  .board-row .rk { color: var(--accent); font-variant-numeric: tabular-nums; opacity: .85; }
+  .board-row .rk {
+    color: var(--accent); font-variant-numeric: tabular-nums; opacity: .85;
+    text-align: center;
+  }
   .board-row .nm {
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink);
+    min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--ink);
   }
   .board-row .sc {
     font-family: "Cormorant Garamond", Georgia, serif; font-size: 18px;
     color: var(--accent); font-variant-numeric: tabular-nums;
+    text-align: right; white-space: nowrap; padding-left: 4px;
   }
   .board-row.me { background: rgba(143,184,130,.1); }
   .board-row.me .nm { color: #eafff0; }
   .board-empty, .board-err {
-    padding: 14px; text-align: center; color: var(--muted); font-size: 13px; font-style: italic;
+    padding: 14px 12px; text-align: center; color: var(--muted); font-size: 13px; font-style: italic;
+    word-break: break-word;
   }
-  .board-err { color: var(--danger); font-style: normal; }
+  .board-err { color: var(--danger); font-style: normal; line-height: 1.4; font-size: 12px; }
   .name-row { margin: 14px 0 10px; text-align: left; }
   .name-row label {
-    display: block; font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+    display: block; font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
     color: var(--muted); margin-bottom: 6px;
   }
   .name-row input {
     width: 100%; box-sizing: border-box;
     background: rgba(0,0,0,.28); border: 1px solid var(--line); border-radius: 12px;
-    color: var(--ink); font-family: inherit; font-size: 15px; padding: 12px 14px;
+    color: var(--ink); font-family: inherit; font-size: 16px; padding: 12px 14px;
   }
   .name-row input:focus {
     outline: none; border-color: var(--accent);
@@ -217,11 +275,57 @@
   }
   .save-msg {
     min-height: 1.2em; margin: 8px 0 0; font-size: 12.5px; color: var(--muted);
+    line-height: 1.4; word-break: break-word;
   }
   .save-msg.ok { color: var(--accent); }
   .save-msg.err { color: var(--danger); }
   .card .btn + .btn { margin-top: 10px; }
   .btn[disabled] { opacity: .5; cursor: not-allowed; animation: none; }
+  .note-tiny {
+    margin: 8px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--muted);
+  }
+
+  /* Phones / short viewports: denser card, always fully reachable */
+  @media (max-width: 480px), (max-height: 720px) {
+    .panel {
+      align-items: flex-start;
+      padding: max(10px, env(safe-area-inset-top)) 10px max(12px, env(safe-area-inset-bottom));
+    }
+    .card {
+      max-height: none; /* panel scrolls the whole sheet */
+      width: 100%;
+      border-radius: 18px;
+      padding: 18px 14px 16px;
+    }
+    .card h1 { font-size: clamp(28px, 8vw, 40px); margin-bottom: 8px; }
+    .card p { font-size: 13.5px; margin-bottom: 12px; max-width: none; }
+    .stats { gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+    .stat { min-width: 72px; padding: 8px 10px; }
+    .stat b { font-size: 24px; }
+    .btn { max-width: none; padding: 14px 18px; font-size: 14.5px; }
+    .board { margin: 10px 0 4px; border-radius: 12px; }
+    .board-list { max-height: min(180px, 28vh); }
+    .board-row {
+      grid-template-columns: 28px minmax(0, 1fr) minmax(36px, auto);
+      padding: 8px 10px; font-size: 13px; gap: 6px;
+    }
+    .board-row .sc { font-size: 16px; }
+    .name-row { margin: 10px 0 8px; }
+    .name-row input { font-size: 16px; padding: 11px 12px; } /* 16px avoids iOS zoom */
+    .hint { margin-top: 12px; font-size: 11px; }
+  }
+  @media (max-width: 360px) {
+    .board-row .nm { font-size: 12.5px; }
+    .stat { min-width: 64px; }
+  }
+  /* Landscape phones: keep actions + board usable */
+  @media (orientation: landscape) and (max-height: 480px) {
+    .panel { align-items: flex-start; }
+    .card { max-width: min(520px, 96vw); padding: 14px 16px; }
+    .stats { margin-bottom: 10px; }
+    .board-list { max-height: 110px; }
+    .card h1 { font-size: 28px; }
+  }
 
   @media (prefers-reduced-motion: reduce) {
     .btn, .ring { animation: none; }
@@ -292,7 +396,7 @@
       </div>
       <button class="btn" id="saveScoreBtn" type="button">Save / update best</button>
       <p class="save-msg" id="saveMsg"></p>
-      <p class="hint" style="margin-top:6px;opacity:.85">One name per player. Same device updates your best; others can’t steal your name.</p>
+      <p class="hint note-tiny" style="margin-top:6px;opacity:.85">One name per player · same device updates best</p>
 
       <div class="board" id="overBoard" style="margin-top:12px">
         <div class="board-head">
@@ -501,6 +605,13 @@
   }
   sb = initSupabase();
 
+  // Fewer rows on phones so the board + save + retry all fit without feeling cramped.
+  var BOARD_LIMIT = (window.matchMedia && (
+    window.matchMedia('(max-width: 480px)').matches ||
+    window.matchMedia('(max-height: 700px)').matches ||
+    window.matchMedia('(pointer: coarse)').matches
+  )) ? 8 : 12;
+
   function renderBoard(listEl, rows, highlightName) {
     if (!listEl) return;
     if (!sb) {
@@ -512,11 +623,13 @@
       return;
     }
     var hn = (highlightName || '').toLowerCase();
-    listEl.innerHTML = rows.map(function (r, i) {
+    var top = rows.slice(0, BOARD_LIMIT);
+    listEl.innerHTML = top.map(function (r, i) {
       var me = hn && String(r.player_name || '').toLowerCase() === hn;
+      var name = String(r.player_name == null ? '' : r.player_name).trim() || '—';
       return '<div class="board-row' + (me ? ' me' : '') + '">'
         + '<span class="rk">' + (i + 1) + '</span>'
-        + '<span class="nm">' + esc(r.player_name) + '</span>'
+        + '<span class="nm" title="' + esc(name) + '">' + esc(name) + '</span>'
         + '<span class="sc">' + esc(r.score) + '</span>'
         + '</div>';
     }).join('');
@@ -534,7 +647,7 @@
         .select('player_name, score, created_at, id')
         .order('score', { ascending: false })
         .order('created_at', { ascending: true })
-        .limit(15);
+        .limit(BOARD_LIMIT);
       if (res.error) throw res.error;
       boardRows = res.data || [];
       var hn = sanitizeName(nameStart && nameStart.value);

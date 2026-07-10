@@ -11,7 +11,7 @@
  *
  * Bump CACHE_VERSION whenever you want to force-clear old caches.
  * ========================================================================== */
-const CACHE_VERSION = "bosithon-v6-scroll-smooth";
+const CACHE_VERSION = "bosithon-v14-scroll-slower";
 const PRECACHE = ["./forest-loop.mp4"]; // big shared asset used on every page
 
 self.addEventListener("install", (event) => {
