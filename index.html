@@ -96,6 +96,9 @@
     position: fixed; top: 0; left: 0;
     width: 100%; height: 100%;
     z-index: 1; display: block; background: var(--bg);
+    /* Hint GPU layer; avoid expensive CSS filters on this layer. */
+    transform: translateZ(0);
+    contain: strict;
   }
   #vignette {
     position: fixed; inset: 0; z-index: 2; pointer-events: none;
@@ -133,16 +136,20 @@
   }
   /* Smooth fade played when a contact link is clicked, before opening it. */
   #nav-fade {
-    position: fixed; inset: 0; z-index: 40; pointer-events: none;
+    position: fixed; inset: 0; z-index: 40;
+    /* NEVER capture clicks — even when visible (stuck fade after Back was a bug). */
+    pointer-events: none !important;
     background: radial-gradient(ellipse at center, rgba(143,184,130,0.22), rgba(4,8,3,0.97));
     opacity: 0; transition: opacity 0.45s ease;
   }
-  #nav-fade.on { opacity: 1; }
+  #nav-fade.on { opacity: 1; pointer-events: none !important; }
 
   /* Real 3D text renders here (WebGL). Sits above the vignette. */
   #text3d {
     position: fixed; inset: 0; z-index: 5;
     width: 100%; height: 100%; display: block; pointer-events: none;
+    transform: translateZ(0);
+    contain: strict;
   }
   /* Static fallback shown only for reduced-motion / no-WebGL. */
   .panel {
@@ -426,6 +433,75 @@
     // Don't let the browser restore the previous scroll position on reload.
     if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
+    /*
+     * Browser BACK from Flappy/Drift/Anonym often restores this page from the
+     * back-forward cache (bfcache). That frozen snapshot can leave:
+     *   - navigating === true  → 3D item clicks do nothing
+     *   - #nav-fade.on         → screen stuck fogged/dimmed (your screenshot)
+     *   - dead WebGL / Lenis   → looks pretty, no interaction
+     *
+     * Strategy:
+     *  1) Opt out of bfcache when possible (empty unload listener).
+     *  2) Mark when we leave to an internal page; on return force a real reload.
+     *  3) On pageshow: if restored from cache OR fade still on → reload once.
+     * sessionStorage skip-intro still skips the Enter gate after reload.
+     */
+    var FROM_INTERNAL_KEY = 'bosithon_from_internal';
+    var RELOAD_GUARD_KEY = 'bosithon_bf_reload_guard';
+
+    // Empty unload opts many browsers out of bfcache for this document.
+    window.addEventListener('unload', function () {});
+
+    function forceFreshForest(reason) {
+      try {
+        // Avoid infinite reload loops
+        if (sessionStorage.getItem(RELOAD_GUARD_KEY) === '1') {
+          sessionStorage.removeItem(RELOAD_GUARD_KEY);
+          sessionStorage.removeItem(FROM_INTERNAL_KEY);
+          return false;
+        }
+        sessionStorage.setItem(RELOAD_GUARD_KEY, '1');
+        sessionStorage.removeItem(FROM_INTERNAL_KEY);
+      } catch (e) {}
+      try {
+        window.location.reload();
+      } catch (e2) {
+        window.location.href = window.location.pathname + window.location.search + window.location.hash;
+      }
+      return true;
+    }
+
+    window.addEventListener('pageshow', function (e) {
+      var fromInternal = false;
+      var fadeStuck = false;
+      var backForward = false;
+      try { fromInternal = sessionStorage.getItem(FROM_INTERNAL_KEY) === '1'; } catch (err) {}
+      try {
+        var nf = document.getElementById('nav-fade');
+        fadeStuck = !!(nf && nf.classList.contains('on'));
+      } catch (err2) {}
+      try {
+        var nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+        backForward = !!(nav && nav.type === 'back_forward');
+      } catch (err3) {}
+
+      // Always clear stuck overlay UI immediately
+      try {
+        var nf2 = document.getElementById('nav-fade');
+        if (nf2) nf2.classList.remove('on');
+        document.body.classList.remove('link-hover');
+      } catch (err4) {}
+
+      // Frozen restore, stuck fade, or Back from a game → full reload (WebGL safe)
+      if (e.persisted || fadeStuck || (fromInternal && (e.persisted || backForward))) {
+        forceFreshForest(e.persisted ? 'bfcache' : (fadeStuck ? 'fade_stuck' : 'back_from_game'));
+        return;
+      }
+
+      try { sessionStorage.removeItem(FROM_INTERNAL_KEY); } catch (err5) {}
+      try { sessionStorage.removeItem(RELOAD_GUARD_KEY); } catch (err6) {}
+    });
+
     // Device classing: width OR a coarse pointer means "mobile" — so a phone in
     // landscape (which can be >768px wide) still gets the lighter, optimized path.
     var coarse = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
@@ -436,7 +512,11 @@
     // Clamp render resolution. Native DPR on phones is often 3+, which destroys
     // WebGL/canvas fill-rate; the researched consensus is to cap near 2 on
     // desktop and lower on mobile/low-end for stable FPS at imperceptible cost.
-    function maxDPR() { return isMobile ? (PERF_LOW ? 1.25 : 1.75) : 2; }
+    // Display DPR (video canvas + WebGL). Full 2x retina on both is the main
+    // scroll jank source — text/forest still look sharp at ~1.5.
+    function maxDPR() { return isMobile ? (PERF_LOW ? 1.1 : 1.35) : (PERF_LOW ? 1.35 : 1.5); }
+    function maxVideoDPR() { return isMobile ? (PERF_LOW ? 1.05 : 1.25) : (PERF_LOW ? 1.25 : 1.4); }
+    function maxWebglDPR() { return isMobile ? (PERF_LOW ? 1.05 : 1.3) : (PERF_LOW ? 1.3 : 1.5); }
     var REF_ASPECT = 1.6; // design reference aspect; drives aspect-aware FOV below.
     var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var CYCLE_PX = isMobile ? 2500 : 4000;
@@ -446,7 +526,15 @@
 
     document.body.style.height = '999999px';
 
-    var lenis = new Lenis({ lerp: 0.09, smoothWheel: true, syncTouch: isMobile, wheelMultiplier: 1, infinite: false });
+    // Snappier Lenis: old lerp 0.09 + SMOOTH 0.2 stacked into double lag.
+    var lenis = new Lenis({
+      lerp: isMobile ? 0.14 : 0.16,
+      smoothWheel: true,
+      syncTouch: isMobile,
+      wheelMultiplier: isMobile ? 0.95 : 1.05,
+      touchMultiplier: isMobile ? 1.15 : 1.2,
+      infinite: false
+    });
     function getScroll() {
       var s = (lenis && typeof lenis.scroll === 'number') ? lenis.scroll : window.scrollY;
       return s || 0;
@@ -628,23 +716,23 @@
       note.classList.add('on');
     })();
 
-    // ---- Forest ink cursor: a gooey moss-green dot trail that chases the
-    // pointer and gently floats when idle (fine-pointer / non-touch only). ----
+    // ---- Forest ink cursor (fine pointer only). Separate rAF only while the
+    // pointer is active — was a permanent 18-DOM-transform loop every frame. ----
     (function () {
       var fine = window.matchMedia && window.matchMedia('(pointer: fine)').matches;
-      if (!fine) return;
+      if (!fine || PERF_LOW) return;
       var host = document.getElementById('ink-cursor');
       if (!host) return;
       document.body.classList.add('has-cursor');
-      var AMOUNT = 18, SINE_DOTS = Math.floor(AMOUNT * 0.3), DOT = 24, IDLE_MS = 150, CHASE = 0.35;
-      var mouse = { x: -300, y: -300 }, dots = [], idle = false, idleID = null;
+      var AMOUNT = 12, SINE_DOTS = Math.floor(AMOUNT * 0.3), DOT = 22, IDLE_MS = 180, CHASE = 0.38;
+      var mouse = { x: -300, y: -300 }, dots = [], idle = false, idleID = null, rafOn = false, sleepT = null;
       function Dot(i) {
         this.index = i; this.x = -300; this.y = -300;
-        this.scale = 1 - 0.05 * i;
+        this.scale = 1 - 0.06 * i;
         this.range = DOT / 2 - (DOT / 2) * this.scale + 2;
         this.anglespeed = 0.05; this.angleX = 0; this.angleY = 0; this.lockX = 0; this.lockY = 0;
         var el = document.createElement('span');
-        var op = Math.max(0.72 - i * 0.026, 0.1);
+        var op = Math.max(0.72 - i * 0.04, 0.12);
         el.style.background = 'rgba(150,196,128,' + op.toFixed(2) + ')';
         this.el = el; host.appendChild(el);
       }
@@ -658,14 +746,15 @@
           this.x = this.lockX + Math.sin(this.angleX) * this.range;
           this.y = this.lockY + Math.sin(this.angleY) * this.range;
         }
-        this.el.style.transform = 'translate(calc(' + this.x + 'px - 50%), calc(' + this.y + 'px - 50%)) scale(' + this.scale.toFixed(3) + ')';
+        this.el.style.transform = 'translate3d(' + (this.x - DOT / 2) + 'px,' + (this.y - DOT / 2) + 'px,0) scale(' + this.scale.toFixed(3) + ')';
       };
       for (var di = 0; di < AMOUNT; di++) dots.push(new Dot(di));
       function resetIdle() {
         clearTimeout(idleID); idle = false;
         idleID = setTimeout(function () { idle = true; for (var k = 0; k < dots.length; k++) dots[k].lock(); }, IDLE_MS);
       }
-      (function loop() {
+      function tick() {
+        if (!rafOn) return;
         var x = mouse.x, y = mouse.y;
         for (var i = 0; i < dots.length; i++) {
           var dot = dots[i], next = dots[i + 1] || dots[0];
@@ -673,9 +762,17 @@
           if (!idle || i <= SINE_DOTS) { x += (next.x - dot.x) * CHASE; y += (next.y - dot.y) * CHASE; }
           dot.draw();
         }
-        requestAnimationFrame(loop);
-      })();
-      window.addEventListener('pointermove', function (e) { mouse.x = e.clientX; mouse.y = e.clientY; resetIdle(); }, { passive: true });
+        requestAnimationFrame(tick);
+      }
+      function wakeCursor() {
+        clearTimeout(sleepT);
+        if (!rafOn) { rafOn = true; requestAnimationFrame(tick); }
+        // Stop the cursor rAF shortly after idle to free main-thread budget for scroll.
+        sleepT = setTimeout(function () { rafOn = false; }, 900);
+      }
+      window.addEventListener('pointermove', function (e) {
+        mouse.x = e.clientX; mouse.y = e.clientY; resetIdle(); wakeCursor();
+      }, { passive: true });
     })();
 
     // ============================================================
@@ -683,20 +780,25 @@
     // ============================================================
     var video = document.getElementById('forest');
     var canvas = document.getElementById('video-canvas');
-    var ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
-    var DPR = maxDPR();
+    // desynchronized + alpha:false = lower compositor latency for scroll scrubbing
+    var ctx = canvas.getContext('2d', { alpha: false, desynchronized: true, willReadFrequently: false });
+    var DPR = maxVideoDPR();
     var loader = document.getElementById('loader');
     var loaderHidden = false;
 
     var hasRVFC = ('requestVideoFrameCallback' in HTMLVideoElement.prototype);
-    var CAPTURE_MAX = isMobile ? 720 : 1000;
-    var MAX_FRAMES  = isMobile ? 80 : 140;
+    // Capture budget: smaller frames + denser timeline = smoother scrubbing at
+    // lower GPU cost than 1000px × 140 canvases (previous settings).
+    var CAPTURE_MAX = isMobile ? (PERF_LOW ? 400 : 540) : (PERF_LOW ? 640 : 720);
+    var MAX_FRAMES  = isMobile ? (PERF_LOW ? 72 : 100) : (PERF_LOW ? 120 : 168);
     // Harvest faster than realtime so the loader resolves quickly (only when
     // requestVideoFrameCallback is available; the timeupdate fallback needs 1x).
-    var HARVEST_RATE = hasRVFC ? (isMobile ? 2 : 3) : 1;
+    var HARVEST_RATE = hasRVFC ? (isMobile ? 2.5 : 4) : 1;
     var HEAD_TRIM = 0.04, TAIL_TRIM = 0.08; // fallback trim when pixels can't be read
     var COVER_T = 0.92; // harvest done once playback covers this fraction of duration
-    var SMOOTH = 0.2;   // base easing per 60fps-frame (made frame-rate independent)
+    // Snappier easing (was 0.2 → felt like double lag with Lenis).
+    var SMOOTH = isMobile ? 0.30 : 0.34;
+    var CROSSFADE_EPS = 0.01; // skip redraw when sub-frame barely moved
     var capCw = 0, capCh = 0;
     var duration = 0;
     var numFrames = 0;
@@ -708,6 +810,8 @@
     var capturing = false;
     var framesReady = false;
     var initStarted = false, initialReady = false;
+    var scrollingHot = false; // cheaper canvas filtering while the wheel is moving
+    var lastScrollActivity = 0;
 
     var smoothed = 0;
     var textSmoothed = 0;
@@ -715,16 +819,22 @@
     var dirty = true;
 
     function sizeVideoCanvas() {
-      DPR = maxDPR();
-      canvas.width = Math.floor(window.innerWidth * DPR);
-      canvas.height = Math.floor(window.innerHeight * DPR);
+      DPR = maxVideoDPR();
+      var w = Math.floor(window.innerWidth * DPR);
+      var h = Math.floor(window.innerHeight * DPR);
+      // Avoid reallocating identical buffers (causes hitch mid-scroll on mobile).
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
       // Display via CSS percentages (not fixed px) so the canvas keeps fully
       // covering the viewport during the brief moments the mobile URL bar
       // animates, even though we debounce the actual buffer reallocation.
       canvas.style.width = '100%';
       canvas.style.height = '100%';
       ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
+      // 'high' every frame is expensive; medium is visually fine for forest scrub.
+      ctx.imageSmoothingQuality = scrollingHot ? 'low' : 'medium';
       dirty = true;
       drawDisplay();
     }
@@ -764,7 +874,9 @@
     function makeFrame() {
       var c = document.createElement('canvas');
       c.width = capCw; c.height = capCh;
-      c.getContext('2d').drawImage(video, 0, 0, capCw, capCh);
+      // alpha:false is cheaper to composite later when scrubbing
+      var cctx = c.getContext('2d', { alpha: false, willReadFrequently: false });
+      cctx.drawImage(video, 0, 0, capCw, capCh);
       return c;
     }
 
@@ -789,14 +901,26 @@
         var i0 = Math.floor(fpos);
         var frac = fpos - i0;
         var i1 = (i0 + 1 > lastGood) ? i0 : i0 + 1;
-        if (!dirty && i0 === lastI0 && Math.abs(frac - lastFrac) < 0.004) return;
+        // Skip identical redraws (biggest free win while settled / micro-jitter).
+        if (!dirty && i0 === lastI0 && Math.abs(frac - lastFrac) < CROSSFADE_EPS) return;
+        // Cheaper filtering while the user is actively scrolling.
+        ctx.imageSmoothingQuality = scrollingHot ? 'low' : 'medium';
         ctx.globalAlpha = 1;
-        ctx.fillStyle = '#060905'; ctx.fillRect(0, 0, cw, ch);
+        // Clear via fill only when first frame doesn't cover (opaque frames do).
         var f0 = getFrameAt(i0);
-        if (f0) coverDraw(f0, f0.width, f0.height);
-        if (frac > 0.001 && i1 !== i0) {
+        if (f0) {
+          coverDraw(f0, f0.width || capCw, f0.height || capCh);
+        } else {
+          ctx.fillStyle = '#060905'; ctx.fillRect(0, 0, cw, ch);
+        }
+        // Cross-fade only when it actually helps (mid-blend); skip near 0/1.
+        if (frac > 0.04 && frac < 0.96 && i1 !== i0) {
           var f1 = getFrameAt(i1);
-          if (f1 && f1 !== f0) { ctx.globalAlpha = frac; coverDraw(f1, f1.width, f1.height); ctx.globalAlpha = 1; }
+          if (f1 && f1 !== f0) {
+            ctx.globalAlpha = frac;
+            coverDraw(f1, f1.width || capCw, f1.height || capCh);
+            ctx.globalAlpha = 1;
+          }
         }
         lastI0 = i0; lastFrac = frac; dirty = false;
       } else {
@@ -820,7 +944,9 @@
       duration = (isFinite(video.duration) && video.duration > 0) ? video.duration : 0;
       if (!duration) return;
       computeCaptureSize();
-      numFrames = Math.min(MAX_FRAMES, Math.max(48, Math.round(duration * 30)));
+      // ~24 fps equivalent over clip length (was *30) — denser than before
+      // relative to lower CAPTURE_MAX so scrub feels smoother without ballooning VRAM.
+      numFrames = Math.min(MAX_FRAMES, Math.max(56, Math.round(duration * 26)));
       frames = new Array(numFrames); filled = 0; maxT = 0;
       firstGood = Math.min(numFrames - 1, Math.round(numFrames * HEAD_TRIM));
       lastGood = Math.max(firstGood + 1, numFrames - 1 - Math.round(numFrames * TAIL_TRIM));
@@ -940,17 +1066,31 @@
       var canvas3 = document.getElementById('text3d');
       var renderer;
       try {
-        renderer = new THREE.WebGLRenderer({ canvas: canvas3, alpha: true, antialias: !isMobile, powerPreference: 'high-performance' });
+        // Antialias off on mobile/low-end; powerPreference high for dedicated GPU.
+        renderer = new THREE.WebGLRenderer({
+          canvas: canvas3,
+          alpha: true,
+          antialias: !isMobile && !PERF_LOW,
+          powerPreference: 'high-performance',
+          stencil: false,
+          depth: true
+        });
       } catch (e) {
         if (fallback) fallback.classList.add('show');
         return;
       }
-      renderer.setPixelRatio(maxDPR());
+      renderer.setPixelRatio(maxWebglDPR());
       renderer.setSize(window.innerWidth, window.innerHeight, false);
       renderer.setClearColor(0x000000, 0);
       if ('outputEncoding' in renderer) renderer.outputEncoding = THREE.sRGBEncoding;
-      renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.05;
+      // ACES is pretty but costly every frame — keep on desktop, lighter on mobile.
+      if (isMobile || PERF_LOW) {
+        renderer.toneMapping = THREE.NoToneMapping;
+        renderer.toneMappingExposure = 1.0;
+      } else {
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.05;
+      }
 
       var scene = new THREE.Scene();
       scene.fog = new THREE.Fog(0x060905, 22, 96);
@@ -1270,6 +1410,13 @@
         }
         return null;
       }
+      function clearNavLock() {
+        navigating = false;
+        if (navFade) navFade.classList.remove('on');
+        document.body.classList.remove('link-hover');
+        hovered = null;
+      }
+
       function triggerNav(mesh) {
         if (navigating) return;
         navigating = true;
@@ -1278,13 +1425,45 @@
         if (navFade) navFade.classList.add('on');
         setTimeout(function () {
           var u = mesh.userData.url;
-          // Internal pages (the Anonym space) navigate in the same tab.
-          if (mesh.userData.sameTab) { window.location.href = u; return; }
+          // Internal pages (games / anonym) — leave this tab. Do NOT leave
+          // navigating locked if navigation is cancelled (e.g. beforeunload).
+          if (mesh.userData.sameTab) {
+            try { sessionStorage.setItem(FROM_INTERNAL_KEY, '1'); } catch (e0) {}
+            // Unlock BEFORE leave so a frozen snapshot is not stuck dimmed.
+            clearNavLock();
+            try { window.location.assign(u); } catch (e) { window.location.href = u; }
+            setTimeout(clearNavLock, 800);
+            return;
+          }
           try { window.open(u, '_blank', 'noopener'); } catch (e) { window.location.href = u; }
-          if (navFade) navFade.classList.remove('on');
-          navigating = false;
+          clearNavLock();
         }, 460);
       }
+
+      // Soft recovery if the page is shown again without a full reload
+      // (some browsers, or when bfcache reload is skipped).
+      window.addEventListener('pageshow', function () {
+        clearNavLock();
+        try { Ambience.resume(); } catch (e) {}
+        restFrames = 30;
+        try {
+          if (typeof resize3d === 'function') resize3d();
+        } catch (e) {}
+      });
+      window.addEventListener('pagehide', function () {
+        clearNavLock();
+      });
+
+      // GPU context lost after Back → hard restart
+      try {
+        if (canvas3) {
+          canvas3.addEventListener('webglcontextlost', function (ev) {
+            try { ev.preventDefault(); } catch (e) {}
+            forceFreshForest('webgl_lost');
+          }, false);
+        }
+      } catch (e) {}
+
       window.addEventListener('pointermove', function (e) {
         pCX = e.clientX; pCY = e.clientY;
         pTX = (e.clientX / window.innerWidth) * 2 - 1;
@@ -1308,7 +1487,10 @@
       function smooth(t) { t = t < 0 ? 0 : (t > 1 ? 1 : t); return t * t * (3 - 2 * t); }
 
       var prevIntro = 0, rollEase = 0, fovEase = BASE_FOV, restFrames = 1, lastCamZ = 1e9, anonT = 0;
-      var blurEase = 0, lastBlur = -1, dofOn = !isMobile;
+      var blurEase = 0, lastBlur = -1;
+      // CSS filter:blur on a full-screen WebGL canvas is extremely expensive
+      // (often the #1 scroll jank source). Disable on mobile/low-end; soft cap on desktop.
+      var dofOn = !isMobile && !PERF_LOW && !reduceMotion;
 
       update3d = function (smoothedCp, dt, scrollRaw) {
         if (!scene3dReady) return;
@@ -1324,9 +1506,9 @@
         var speed = Math.abs(vel);
 
         var kk = 1 - Math.pow(0.0015, dt / 1000); // time-based ease
-        var fovTarget = BASE_FOV + Math.min(14, speed * 2600);
+        var fovTarget = BASE_FOV + Math.min(10, speed * 2000);
         fovEase += (fovTarget - fovEase) * Math.min(1, kk * 1.3);
-        var rollTarget = Math.max(-0.05, Math.min(0.05, vel * 9));
+        var rollTarget = Math.max(-0.04, Math.min(0.04, vel * 7));
         rollEase += (rollTarget - rollEase) * Math.min(1, kk * 1.3);
 
         // Pointer + scroll parallax (eased). Nearer text shifts more than far
@@ -1336,13 +1518,18 @@
         var camTX = Math.sin((scrollRaw || 0) * 0.0007) * 0.22 + pX * 0.85;
         var camTY = -pY * 0.5;
 
-        // Depth-of-field rack focus: soft during fast fly-through, razor sharp
-        // once a line settles into the readable zone (clears to 0 at rest).
+        // Soft motion cue without heavy blur. Cap 0.9px and update sparingly.
         if (dofOn) {
-          var blurT = Math.min(2.4, speed * 950);
-          blurEase += (blurT - blurEase) * Math.min(1, kk * 1.4);
-          var bq = Math.round(blurEase * 5) / 5;
-          if (bq !== lastBlur) { canvas3.style.filter = bq > 0.05 ? ('blur(' + bq + 'px)') : ''; lastBlur = bq; }
+          var blurT = Math.min(0.9, speed * 320);
+          blurEase += (blurT - blurEase) * Math.min(1, kk * 1.6);
+          var bq = Math.round(blurEase * 4) / 4;
+          if (bq !== lastBlur) {
+            canvas3.style.filter = bq > 0.12 ? ('blur(' + bq.toFixed(2) + 'px)') : '';
+            lastBlur = bq;
+          }
+        } else if (lastBlur !== 0) {
+          canvas3.style.filter = '';
+          lastBlur = 0;
         }
 
         var moving = Math.abs(camZ - lastCamZ) > 0.0008;
@@ -1490,7 +1677,7 @@
         fovEase = BASE_FOV;
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
-        renderer.setPixelRatio(maxDPR());
+        renderer.setPixelRatio(maxWebglDPR());
         renderer.setSize(window.innerWidth, window.innerHeight, false);
         lastCamZ = 1e9;
       };
@@ -1554,6 +1741,7 @@
     var lastScrollSeen = Number.NaN;
     var settled = false;
     var prevTime = 0;
+    var lastDrawnScroll = Number.NaN;
     function loop(time) {
       requestAnimationFrame(loop);
       lenis.raf(time);
@@ -1561,13 +1749,24 @@
       var dt = prevTime ? (time - prevTime) : 16.67;
       prevTime = time;
       if (dt <= 0 || dt > 100) dt = 16.67;
+      // Cap huge frame gaps (tab return) so easing doesn't jump a mile.
+      if (dt > 48) dt = 48;
       var k = 1 - Math.pow(1 - SMOOTH, dt / 16.667);
 
       var scroll = getScroll();
+      // Mark active scrolling for cheaper video filtering (~200ms after last move).
+      if (scroll !== lastScrollSeen) {
+        lastScrollActivity = time;
+        scrollingHot = true;
+      } else if (scrollingHot && (time - lastScrollActivity) > 180) {
+        scrollingHot = false;
+        dirty = true; // one sharper redraw when settled
+      }
+
       var cycleProgress = ((scroll / CYCLE_PX) % 1 + 1) % 1;
       var delta = cycleProgress - smoothed;
       if (delta > 0.5) delta -= 1; else if (delta < -0.5) delta += 1;
-      if (Math.abs(delta) < 0.0002) { smoothed = cycleProgress; settled = true; }
+      if (Math.abs(delta) < 0.00015) { smoothed = cycleProgress; settled = true; }
       else { smoothed = ((smoothed + delta * k) % 1 + 1) % 1; settled = false; }
 
       // 3D text rides an absolute, non-looping progress so it flies in once and
@@ -1575,14 +1774,20 @@
       var textTarget = scroll / TEXT_SPAN;
       if (textTarget < 0) textTarget = 0; if (textTarget > 1) textTarget = 1;
       textSmoothed += (textTarget - textSmoothed) * k;
-      if (Math.abs(textTarget - textSmoothed) < 0.00015) textSmoothed = textTarget;
+      if (Math.abs(textTarget - textSmoothed) < 0.00012) textSmoothed = textTarget;
 
+      // Always scrub video when smoothing; drawDisplay early-outs if unchanged.
       drawDisplay();
       update3d(textSmoothed, dt, scroll);
-      updateNav(textSmoothed);
+
+      // Nav / hint DOM only when scroll actually moved (avoid style thrash).
       if (scroll !== lastScrollSeen || !settled) {
+        updateNav(textSmoothed);
         updateHint(scroll);
         lastScrollSeen = scroll;
+      } else if (Math.abs(textSmoothed - (lastDrawnScroll || 0)) > 0.002) {
+        updateNav(textSmoothed);
+        lastDrawnScroll = textSmoothed;
       }
     }
 

@@ -98,8 +98,11 @@ begin
 
   v_payload := v_ticket.salt || '|' || p_score::text || '|' || p_duration_ms::text
             || '|' || p_events::text || '|' || v_client || '|flappy';
-  -- Explicit casts fix: digest(text, unknown) does not exist on Supabase
-  v_expect := encode(extensions.digest(v_payload, 'sha256'::text), 'hex');
+  -- bytea + explicit text cast (fixes: digest(text, unknown) does not exist)
+  v_expect := encode(
+    extensions.digest(convert_to(v_payload, 'UTF8'), 'sha256'::text),
+    'hex'
+  );
 
   if v_proof is distinct from v_expect then
     update public.game_run_tickets set used_at = now(), score_submitted = p_score where id = v_ticket.id;
@@ -223,7 +226,10 @@ begin
 
   v_payload := v_ticket.salt || '|' || p_score::text || '|' || p_duration_ms::text
             || '|' || p_events::text || '|' || v_client || '|drift';
-  v_expect := encode(extensions.digest(v_payload, 'sha256'::text), 'hex');
+  v_expect := encode(
+    extensions.digest(convert_to(v_payload, 'UTF8'), 'sha256'::text),
+    'hex'
+  );
 
   if v_proof is distinct from v_expect then
     update public.game_run_tickets set used_at = now(), score_submitted = p_score where id = v_ticket.id;
