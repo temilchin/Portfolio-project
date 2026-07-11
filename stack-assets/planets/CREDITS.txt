@@ -1,0 +1,8 @@
+﻿Forest Stack planet / sky textures
+==================================
+earth.jpg  — webgl-earth (turban) NASA-derived public domain blue marble style map
+stars.jpg  — webgl-earth galaxy starfield
+moon/mars/jupiter/saturn/venus — jeromeetienne/threex.planets maps
+  (commonly redistributed planet maps for demos; free for use in web demos)
+
+Place files in stack-assets/planets/
